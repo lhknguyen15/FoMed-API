@@ -17,6 +17,7 @@ frontend/**/.env*
 
 # Local secrets and databases
 *.local.json
+**/appsettings.Development.json
 *.db
 *.sqlite
 *.sqlite3

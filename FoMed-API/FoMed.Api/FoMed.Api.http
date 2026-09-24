@@ -1,0 +1,6 @@
+@FoMed.Api_HostAddress = http://localhost:5068
+
+GET {{FoMed.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

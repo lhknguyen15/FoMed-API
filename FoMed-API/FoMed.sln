@@ -5,8 +5,6 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FoMed.Api", "FoMed.Api\FoMed.Api.csproj", "{2D7D865D-B2F5-4891-8BEB-E75659F83D79}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FoMed.Domain", "FoMed.Domain\FoMed.Domain.csproj", "{BE4755D7-DB07-4210-873B-A2F7C60F5727}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FoMed.Application", "FoMed.Application\FoMed.Application.csproj", "{C9B9D9FC-48F4-49A3-B32A-FE9EC1ADF8A5}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FoMed.Infrastructure", "FoMed.Infrastructure\FoMed.Infrastructure.csproj", "{55E67BD1-BB33-478A-B89D-80292C0D2D06}"
@@ -33,18 +31,6 @@ Global
 		{2D7D865D-B2F5-4891-8BEB-E75659F83D79}.Release|x64.Build.0 = Release|Any CPU
 		{2D7D865D-B2F5-4891-8BEB-E75659F83D79}.Release|x86.ActiveCfg = Release|Any CPU
 		{2D7D865D-B2F5-4891-8BEB-E75659F83D79}.Release|x86.Build.0 = Release|Any CPU
-		{BE4755D7-DB07-4210-873B-A2F7C60F5727}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{BE4755D7-DB07-4210-873B-A2F7C60F5727}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{BE4755D7-DB07-4210-873B-A2F7C60F5727}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{BE4755D7-DB07-4210-873B-A2F7C60F5727}.Debug|x64.Build.0 = Debug|Any CPU
-		{BE4755D7-DB07-4210-873B-A2F7C60F5727}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{BE4755D7-DB07-4210-873B-A2F7C60F5727}.Debug|x86.Build.0 = Debug|Any CPU
-		{BE4755D7-DB07-4210-873B-A2F7C60F5727}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{BE4755D7-DB07-4210-873B-A2F7C60F5727}.Release|Any CPU.Build.0 = Release|Any CPU
-		{BE4755D7-DB07-4210-873B-A2F7C60F5727}.Release|x64.ActiveCfg = Release|Any CPU
-		{BE4755D7-DB07-4210-873B-A2F7C60F5727}.Release|x64.Build.0 = Release|Any CPU
-		{BE4755D7-DB07-4210-873B-A2F7C60F5727}.Release|x86.ActiveCfg = Release|Any CPU
-		{BE4755D7-DB07-4210-873B-A2F7C60F5727}.Release|x86.Build.0 = Release|Any CPU
 		{C9B9D9FC-48F4-49A3-B32A-FE9EC1ADF8A5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{C9B9D9FC-48F4-49A3-B32A-FE9EC1ADF8A5}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C9B9D9FC-48F4-49A3-B32A-FE9EC1ADF8A5}.Debug|x64.ActiveCfg = Debug|Any CPU

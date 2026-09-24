@@ -1,6 +1,24 @@
 @FoMed.Api_HostAddress = http://localhost:5068
 
-GET {{FoMed.Api_HostAddress}}/weatherforecast/
+### Auth endpoints
+POST {{FoMed.Api_HostAddress}}/api/auth/register
 Accept: application/json
+Content-Type: application/json
+
+{
+  "name": "Test User",
+  "email": "test@fomed.com",
+  "password": "Password123!"
+}
+
+###
+POST {{FoMed.Api_HostAddress}}/api/auth/login
+Accept: application/json
+Content-Type: application/json
+
+{
+  "email": "test@fomed.com",
+  "password": "Password123!"
+}
 
 ###

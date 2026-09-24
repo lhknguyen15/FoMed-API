@@ -1,0 +1,19 @@
+﻿using System;
+using System.Collections.Generic;
+
+namespace FoMed.Infrastructure.Models;
+
+public partial class DoctorTimeOff
+{
+    public int Id { get; set; }
+
+    public int? DoctorId { get; set; }
+
+    public DateTime StartAt { get; set; }
+
+    public DateTime EndAt { get; set; }
+
+    public string? Reason { get; set; }
+
+    public virtual Doctor? Doctor { get; set; }
+}

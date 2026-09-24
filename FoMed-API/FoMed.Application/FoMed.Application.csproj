@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="..\FoMed.Domain\FoMed.Domain.csproj" />
+    <ProjectReference Include="..\FoMed.Infrastructure\FoMed.Infrastructure.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

@@ -21,6 +21,7 @@ builder.Services.AddProblemDetails();
 builder.Services.AddScoped<ClinicRepository>();
 builder.Services.AddScoped<FoMed.Application.Services.Clinical.ClinicAccess>();
 builder.Services.AddScoped<FoMed.Application.Services.Clinical.ClinicalService>();
+builder.Services.AddScoped<FoMed.Application.Services.Clinical.BillingService>();
 builder.Services.AddEndpointsApiExplorer();
 
 // Kết nối database SQL Server theo chuỗi ConnectionStrings:DefaultConnection.

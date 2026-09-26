@@ -18,6 +18,9 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddExceptionHandler<FoMed.Api.Middleware.ApiExceptionHandler>();
 builder.Services.AddProblemDetails();
+builder.Services.AddScoped<ClinicRepository>();
+builder.Services.AddScoped<FoMed.Application.Services.Clinical.ClinicAccess>();
+builder.Services.AddScoped<FoMed.Application.Services.Clinical.ClinicalService>();
 builder.Services.AddEndpointsApiExplorer();
 
 // Kết nối database SQL Server theo chuỗi ConnectionStrings:DefaultConnection.

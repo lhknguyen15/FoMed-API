@@ -1,0 +1,32 @@
+:root {
+  font-family: system-ui, sans-serif;
+  color: #244139;
+  background: #f3f7f4;
+  font-synthesis: none;
+  line-height: 1.6;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; }
+
+#root {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.welcome {
+  width: 100%;
+  max-width: 640px;
+  padding: 48px 24px;
+  border: 1px solid #dde8df;
+  border-radius: 16px;
+  background: white;
+  text-align: center;
+}
+
+.brand { color: #176858; font-size: 36px; font-weight: 750; }
+.eyebrow { margin-top: 24px; font-size: 12px; letter-spacing: 2px; }
+h1 { font-size: clamp(24px, 5vw, 32px); }
+.stack { margin-top: 32px; color: #6c8076; font-size: 14px; }

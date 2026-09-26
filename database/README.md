@@ -97,7 +97,7 @@ Script khong reset `IDENTITY` va `SEQUENCE`, vi vay ID va ma nghiep vu co the ta
 1. Script tao database hien tai dung cac lenh `CREATE TABLE` khong co kiem tra `IF NOT EXISTS`. Phan tao database co the chay lai, nhung phan tao bang khong hoan toan idempotent. Neu chay lai tren database da co bang, script se loi o cac lenh tao bang.
 2. `scheduling.appointments.status` cho phep gia tri tu `0` den `5`, trong khi enum `AppointmentStatus` hien tai moi co `Booked`, `Waiting`, `InProgress`, `Completed`, `Cancelled`. Seed dang su dung y tuong trang thai `NoShow = 5`, can bo sung enum hoac sua constraint/seed cho thong nhat.
 3. Database co role `Technician`, nhung enum `UserRole` trong code can co gia tri tuong ung neu API xu ly quyen theo enum.
-4. `AuthService.RegisterAsync` hien tao user nhung chua tao ban ghi `auth.user_roles`. User moi se chi duoc fallback role `Patient` khi tao token, khong phai role duoc luu that trong database. Can xu ly role mac dinh khi hoan thien Auth.
+4. `AuthService.RegisterAsync` tao user, gan role `Patient` da co trong database va tao ho so `scheduling.patients` trong mot lan SaveChanges. Ma benh nhan dung `scheduling.seq_patient_code` (BN + so thu tu toi thieu 6 chu so). Can khoi tao role Patient truoc khi dang ky. Sequence co the co khoang trong neu dang ky that bai; day la hanh vi binh thuong. Tai khoan cu thieu role/ho so khong duoc tu dong bo sung boi luong dang ky moi.
 5. Script seed khong xoa `audit.audit_logs`. Neu database da co audit log tham chieu user, lenh xoa `auth.users` co the bi chan boi foreign key.
 6. Sau khi thay doi schema, can scaffold lai `FoMedDbContext` va Models de mapping EF Core khop voi database that.
 

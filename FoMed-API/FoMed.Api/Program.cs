@@ -7,26 +7,43 @@ using FoMed.Infrastructure.UnitOfWork;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
+// 1. Khởi tạo các service dùng cho API: controller, Swagger, EF Core, JWT.
+// 2. Các dependency của app được đăng ký vào DI container để service/controller dùng.
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
+
+// Kết nối database SQL Server theo chuỗi ConnectionStrings:DefaultConnection.
 builder.Services.AddDbContext<FoMedDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+// Cấu hình JWT và validate key khi app khởi động.
 builder.Services.AddOptions<JwtOptions>()
     .BindConfiguration(JwtOptions.SectionName)
     .Validate(options => !string.IsNullOrWhiteSpace(options.Key) && options.Key.Length >= 32,
         "JWT key must contain at least 32 characters.")
     .ValidateOnStart();
+
+// Repository và UnitOfWork: tầng dữ liệu.
 builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<IPatientRepository, PatientRepository>();
+builder.Services.AddScoped<IDoctorRepository, DoctorRepository>();
+builder.Services.AddScoped<ISpecialtyRepository, SpecialtyRepository>();
+builder.Services.AddScoped<IDoctorScheduleRepository, DoctorScheduleRepository>();
+builder.Services.AddScoped<IAppointmentRepository, AppointmentRepository>();
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+
+// Các service nghiệp vụ.
 builder.Services.AddScoped<IPasswordHasher, BcryptPasswordHasher>();
 builder.Services.AddScoped<ITokenService, JwtTokenService>();
 builder.Services.AddScoped<AuthService>();
+
+// Cấu hình xác thực JWT cho API.
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -43,13 +60,40 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.Key))
         };
     });
+
+// Cho phép dùng [Authorize] và phân quyền theo role nếu cần.
 builder.Services.AddAuthorization();
-builder.Services.AddSwaggerGen();
+
+// Swagger để test API dễ dàng trong môi trường phát triển.
+// Cấu hình JWT Bearer để Swagger hiển thị nút Authorize và cho phép nhập token.
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new OpenApiInfo { Title = "FoMed API", Version = "v1" });
+
+    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+        Description = "Nhập token theo dạng: Bearer {token}"
+    });
+
+    options.AddSecurityRequirement(document => new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecuritySchemeReference("Bearer", document),
+            new List<string>()
+        }
+    });
+});
 
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
 {
+    // Swagger chỉ bật ở môi trường development.
     app.UseSwagger();
     app.UseSwaggerUI(options =>
     {
@@ -58,9 +102,12 @@ if (app.Environment.IsDevelopment())
     });
 }
 
+// Middleware xác thực và phân quyền phải đứng trước controller.
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+
+// Chuyển hướng HTTPS nếu cần thiết.
 app.UseHttpsRedirection();
 
 app.Run();

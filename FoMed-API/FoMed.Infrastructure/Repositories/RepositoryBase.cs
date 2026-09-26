@@ -6,7 +6,7 @@ namespace FoMed.Infrastructure.Repositories;
 
 public interface IRepositoryBase<TEntity> where TEntity : class
 {
-    Task<TEntity?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
+    Task<TEntity?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
     Task<TEntity?> SingleOrDefaultAsync(Expression<Func<TEntity, bool>> predicate, CancellationToken cancellationToken = default);
     Task AddAsync(TEntity entity, CancellationToken cancellationToken = default);
     void Update(TEntity entity);
@@ -18,7 +18,7 @@ public class RepositoryBase<TEntity>(FoMedDbContext dbContext) : IRepositoryBase
 {
     protected DbSet<TEntity> DbSet => dbContext.Set<TEntity>();
 
-    public Task<TEntity?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
+    public Task<TEntity?> GetByIdAsync(int id, CancellationToken cancellationToken = default) =>
         DbSet.FindAsync([id], cancellationToken).AsTask();
 
     public Task<TEntity?> SingleOrDefaultAsync(

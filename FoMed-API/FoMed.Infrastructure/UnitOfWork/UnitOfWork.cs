@@ -5,14 +5,35 @@ namespace FoMed.Infrastructure.UnitOfWork;
 
 public interface IUnitOfWork
 {
+    Task<IWriteScope> BeginWriteAsync(CancellationToken cancellationToken = default);
     IUserRepository UserRepository { get; }
+    IPatientRepository PatientRepository { get; }
+    IDoctorRepository DoctorRepository { get; }
+    ISpecialtyRepository SpecialtyRepository { get; }
+    IDoctorScheduleRepository DoctorScheduleRepository { get; }
+    IAppointmentRepository AppointmentRepository { get; }
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }
 
-public sealed class UnitOfWork(FoMedDbContext dbContext, IUserRepository users) : IUnitOfWork
+public sealed class UnitOfWork(
+    FoMedDbContext dbContext,
+    IUserRepository users,
+    IPatientRepository patients,
+    IDoctorRepository doctors,
+    ISpecialtyRepository specialties,
+    IAppointmentRepository appointments,
+    IDoctorScheduleRepository doctorSchedules) : IUnitOfWork
 {
     public IUserRepository UserRepository { get; } = users;
+    public IPatientRepository PatientRepository { get; } = patients;
+    public IDoctorRepository DoctorRepository { get; } = doctors;
+    public ISpecialtyRepository SpecialtyRepository { get; } = specialties;
+    public IAppointmentRepository AppointmentRepository { get; } = appointments;
+    public IDoctorScheduleRepository DoctorScheduleRepository { get; } = doctorSchedules;
 
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) =>
         dbContext.SaveChangesAsync(cancellationToken);
+
+    public Task<IWriteScope> BeginWriteAsync(CancellationToken cancellationToken = default) =>
+        WriteScope.BeginAsync(dbContext, cancellationToken);
 }

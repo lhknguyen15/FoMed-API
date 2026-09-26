@@ -11,10 +11,12 @@ public sealed class AuthService(
     IPasswordHasher passwordHasher,
     ITokenService tokenService)
 {
+    // Đăng nhập: kiểm tra email, trạng thái user và mật khẩu hash.
     public async Task<HTTPResponseData<AuthResponse?>> LoginAsync(
         LoginRequest request,
         CancellationToken cancellationToken)
     {
+        // Lấy user theo email; repository đã include role để tạo token đúng role.
         var user = await unitOfWork.UserRepository.GetByEmailAsync(request.Email, cancellationToken);
 
         if (user is null || !user.IsActive || !passwordHasher.Verify(request.Password, user.PasswordHash))
@@ -35,12 +37,14 @@ public sealed class AuthService(
         };
     }
 
+    // Đăng ký: kiểm tra email trùng, tạo user mới và lưu vào database.
     public async Task<HTTPResponseData<AuthResponse?>> RegisterAsync(
         RegisterRequest request,
         CancellationToken cancellationToken)
     {
         var email = request.Email.Trim().ToLowerInvariant();
 
+        // Không cho đăng ký email đã tồn tại.
         if (await unitOfWork.UserRepository.GetByEmailAsync(email, cancellationToken) is not null)
         {
             return new HTTPResponseData<AuthResponse?>
@@ -51,6 +55,11 @@ public sealed class AuthService(
             };
         }
 
+        var patientRole = await unitOfWork.UserRepository.GetRoleByNameAsync("Patient", cancellationToken)
+            ?? throw new InvalidOperationException("Patient role is missing. Initialize the database roles before registering users.");
+        var patientCode = await unitOfWork.PatientRepository.GeneratePatientCodeAsync(cancellationToken);
+
+        // Lưu cả user, role và hồ sơ bệnh nhân trong một lần SaveChanges (một transaction).
         var user = new User
         {
             Username = email,
@@ -59,6 +68,15 @@ public sealed class AuthService(
             PasswordHash = passwordHasher.Hash(request.Password),
             IsActive = true,
             CreatedAt = DateTime.UtcNow
+        };
+        user.UserRoles.Add(new UserRole { User = user, Role = patientRole, RoleId = patientRole.Id });
+        user.Patient = new FoMed.Infrastructure.Models.Patient
+        {
+            User = user,
+            PatientCode = patientCode,
+            FullName = user.FullName,
+            IsActive = true,
+            CreatedAt = user.CreatedAt
         };
         await unitOfWork.UserRepository.AddAsync(user, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -71,6 +89,7 @@ public sealed class AuthService(
         };
     }
 
+    // Tạo payload trả về cho client kèm access token.
     private AuthResponse CreateResponse(User user) =>
         new(
             user.Id,

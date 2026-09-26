@@ -16,6 +16,8 @@ var builder = WebApplication.CreateBuilder(args);
 // 2. Các dependency của app được đăng ký vào DI container để service/controller dùng.
 
 builder.Services.AddControllers();
+builder.Services.AddExceptionHandler<FoMed.Api.Middleware.ApiExceptionHandler>();
+builder.Services.AddProblemDetails();
 builder.Services.AddEndpointsApiExplorer();
 
 // Kết nối database SQL Server theo chuỗi ConnectionStrings:DefaultConnection.
@@ -42,6 +44,7 @@ builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<IPasswordHasher, BcryptPasswordHasher>();
 builder.Services.AddScoped<ITokenService, JwtTokenService>();
 builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<FoMed.Application.Services.Appointment.AppointmentService>();
 builder.Services.AddScoped<FoMed.Application.Services.Profile.ProfileService>();
 builder.Services.AddScoped<FoMed.Application.Services.Patient.PatientService>();
 builder.Services.AddScoped<FoMed.Application.Services.Doctor.DoctorService>();
@@ -94,6 +97,7 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 var app = builder.Build();
+app.UseExceptionHandler();
 
 if (app.Environment.IsDevelopment())
 {

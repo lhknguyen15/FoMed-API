@@ -44,6 +44,8 @@ builder.Services.AddScoped<ITokenService, JwtTokenService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<FoMed.Application.Services.Profile.ProfileService>();
 builder.Services.AddScoped<FoMed.Application.Services.Patient.PatientService>();
+builder.Services.AddScoped<FoMed.Application.Services.Doctor.DoctorService>();
+builder.Services.AddScoped<FoMed.Application.Services.Doctor.DoctorScheduleService>();
 
 // Cấu hình xác thực JWT cho API.
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)

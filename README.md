@@ -1,13 +1,8 @@
 # FoMed
 
-## Frontend React
-
-Frontend nằm trong `frontend`, sử dụng React + TypeScript + Vite.
-Hiện ở bước 1: khởi tạo dự án và trang chào, chưa kết nối BE.
-Chạy `npm ci` và `npm run dev` tại thư mục này, mở http://127.0.0.1:5173.
-Xem [hướng dẫn frontend](frontend/README.md) để hiểu cấu trúc và các lệnh chạy.
-
 Hệ thống quản lý phòng khám dịch vụ.
+
+Repository này quản lý backend. Frontend dự kiến được quản lý riêng trong repository `FoMed-FE`.
 
 ## Tổng quan
 

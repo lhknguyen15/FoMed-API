@@ -92,6 +92,28 @@ public sealed class DoctorService(IUnitOfWork unitOfWork)
         };
     }
 
+    public async Task<HTTPResponseData<IReadOnlyList<PublicDoctorResponse>>> GetPublicDoctorsAsync(
+        int? specialtyId,
+        string? search,
+        CancellationToken cancellationToken)
+    {
+        var doctors = await unitOfWork.DoctorRepository
+            .GetActiveAsync(specialtyId, search, cancellationToken);
+
+        return new HTTPResponseData<IReadOnlyList<PublicDoctorResponse>>
+        {
+            DataResponse = doctors.Select(doctor => new PublicDoctorResponse(
+                doctor.Id,
+                doctor.SpecialtyId,
+                doctor.Specialty.Name,
+                doctor.FullName,
+                doctor.Title,
+                doctor.ConsultationFee)).ToList(),
+            Message = DoctorResponseMessageDTO.GetDoctorsSuccess,
+            StatusCode = 200
+        };
+    }
+
     private static HTTPResponseData<DoctorResponse?> NotFoundResponse() => new()
     {
         DataResponse = null,

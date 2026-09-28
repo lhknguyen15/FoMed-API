@@ -15,6 +15,14 @@ public sealed record DoctorResponse(
     decimal ConsultationFee,
     bool IsActive);
 
+public sealed record PublicDoctorResponse(
+    int DoctorId,
+    int SpecialtyId,
+    string SpecialtyName,
+    string FullName,
+    string? Title,
+    decimal ConsultationFee);
+
 public sealed record UpdateDoctorProfileRequest
 {
     [Required]

@@ -2,6 +2,8 @@
 
 Hệ thống quản lý phòng khám dịch vụ.
 
+Repository này quản lý backend. Frontend dự kiến được quản lý riêng trong repository `FoMed-FE`.
+
 ## Tổng quan
 
 Dự án hiện tập trung vào phần Backend của hệ thống, với cấu trúc được tổ chức theo hướng layer-based Clean Architecture tối giản để dễ mở rộng và làm việc theo từng module.

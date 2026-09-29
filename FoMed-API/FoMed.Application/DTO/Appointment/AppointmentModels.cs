@@ -17,6 +17,9 @@ public sealed record BookAppointmentRequest
     [Required]
     public DateTime StartTime { get; init; }
 
+    [Range(1, int.MaxValue)]
+    public int? ServiceId { get; init; }
+
     [MaxLength(500)]
     public string? Reason { get; init; }
 }
@@ -43,7 +46,9 @@ public sealed record AppointmentResponse(
     string StatusName,
     string? Reason,
     int? QueueNumber,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    int? ServiceId,
+    string? ServiceName);
 
 public sealed record AppointmentStatusHistoryResponse(
     int Id,

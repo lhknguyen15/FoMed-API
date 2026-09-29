@@ -183,6 +183,7 @@ CREATE TABLE scheduling.appointments (
     appointment_code   VARCHAR(20) NOT NULL,
     patient_id         INT NOT NULL,
     doctor_id          INT NOT NULL,
+    service_id         INT NULL,
     start_time         DATETIME2 NOT NULL,
     end_time           DATETIME2 NOT NULL,
     status             TINYINT NOT NULL DEFAULT 0,
@@ -320,6 +321,10 @@ CREATE TABLE billing.services (
     is_active    BIT NOT NULL DEFAULT 1,
     CONSTRAINT CK_services_price CHECK (price >= 0)
 );
+ALTER TABLE scheduling.appointments
+    ADD CONSTRAINT FK_appointments_service FOREIGN KEY (service_id)
+    REFERENCES billing.services(id);
+CREATE INDEX IX_appointments_service ON scheduling.appointments(service_id);
 GO
 
 CREATE TABLE billing.invoices (

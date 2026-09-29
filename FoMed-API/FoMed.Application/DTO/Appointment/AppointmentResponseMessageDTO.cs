@@ -5,6 +5,7 @@ public static class AppointmentResponseMessageDTO
     public const string PatientNotFound = "Khong tim thay ho so benh nhan. Vui long cap nhat thong tin ca nhan.";
     public const string PatientInactive = "Tai khoan benh nhan dang bi khoa hoac khong hoat dong.";
     public const string DoctorNotFound = "Khong tim thay thong tin bac si.";
+    public const string ServiceNotFound = "Khong tim thay dich vu dang hoat dong.";
     public const string DoctorInactive = "Bac si hien khong hoat dong.";
     public const string PastTimeNotAllowed = "Thoi gian dat lich khong duoc o trong qua khu.";
     public const string DoctorNoSchedule = "Bac si khong co lich lam viec trong khung gio nay.";

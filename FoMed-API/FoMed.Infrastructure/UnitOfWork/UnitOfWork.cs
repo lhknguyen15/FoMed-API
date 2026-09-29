@@ -12,6 +12,7 @@ public interface IUnitOfWork
     ISpecialtyRepository SpecialtyRepository { get; }
     IDoctorScheduleRepository DoctorScheduleRepository { get; }
     IAppointmentRepository AppointmentRepository { get; }
+    IServiceRepository ServiceRepository { get; }
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }
 
@@ -22,7 +23,8 @@ public sealed class UnitOfWork(
     IDoctorRepository doctors,
     ISpecialtyRepository specialties,
     IAppointmentRepository appointments,
-    IDoctorScheduleRepository doctorSchedules) : IUnitOfWork
+    IDoctorScheduleRepository doctorSchedules,
+    IServiceRepository services) : IUnitOfWork
 {
     public IUserRepository UserRepository { get; } = users;
     public IPatientRepository PatientRepository { get; } = patients;
@@ -30,6 +32,7 @@ public sealed class UnitOfWork(
     public ISpecialtyRepository SpecialtyRepository { get; } = specialties;
     public IAppointmentRepository AppointmentRepository { get; } = appointments;
     public IDoctorScheduleRepository DoctorScheduleRepository { get; } = doctorSchedules;
+    public IServiceRepository ServiceRepository { get; } = services;
 
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) =>
         dbContext.SaveChangesAsync(cancellationToken);

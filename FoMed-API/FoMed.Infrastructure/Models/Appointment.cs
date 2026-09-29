@@ -13,6 +13,8 @@ public partial class Appointment
 
     public int DoctorId { get; set; }
 
+    public int? ServiceId { get; set; }
+
     public DateTime StartTime { get; set; }
 
     public DateTime EndTime { get; set; }
@@ -38,6 +40,8 @@ public partial class Appointment
     public virtual User? CreatedByNavigation { get; set; }
 
     public virtual Doctor Doctor { get; set; } = null!;
+
+    public virtual Service? Service { get; set; }
 
     public virtual ICollection<Invoice> Invoices { get; set; } = new List<Invoice>();
 

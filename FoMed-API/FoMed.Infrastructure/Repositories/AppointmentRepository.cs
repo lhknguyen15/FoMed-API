@@ -35,6 +35,7 @@ public sealed class AppointmentRepository(FoMedDbContext dbContext)
         dbContext.Appointments
             .Include(a => a.Patient)
             .Include(a => a.Doctor).ThenInclude(d => d.Specialty)
+            .Include(a => a.Service)
             .Include(a => a.AppointmentStatusHistories)
             .SingleOrDefaultAsync(a => a.Id == id, cancellationToken);
 
@@ -45,6 +46,7 @@ public sealed class AppointmentRepository(FoMedDbContext dbContext)
             .AsNoTracking()
             .Include(a => a.Patient)
             .Include(a => a.Doctor).ThenInclude(d => d.Specialty)
+            .Include(a => a.Service)
             .Where(a => a.DoctorId == doctorId);
 
         if (date.HasValue)
@@ -68,6 +70,7 @@ public sealed class AppointmentRepository(FoMedDbContext dbContext)
             .AsNoTracking()
             .Include(a => a.Patient)
             .Include(a => a.Doctor).ThenInclude(d => d.Specialty)
+            .Include(a => a.Service)
             .Where(a => a.PatientId == patientId);
 
         if (date.HasValue)

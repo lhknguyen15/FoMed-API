@@ -9,6 +9,8 @@ Chay dung thu tu sau trong SQL Server Management Studio, Azure Data Studio hoac 
 1. `fomed-create-database.sql`
 2. `fomed-seed-data.sql`
 
+Voi database da tao tu truoc, chay cac script trong `migrations` theo thu tu ten file. Script them `service_id` vao lich hen duoc thiet ke de giu nguyen du lieu cu (cac lich hien tai se co `service_id = NULL`).
+
 Script seed phu thuoc vao database `FoMedDb`, cac schema, bang, sequence va role duoc tao boi script thu nhat.
 
 ## Yeu cau moi truong
@@ -37,7 +39,7 @@ auth.users
   -> scheduling.patients
 
 scheduling.doctors + scheduling.patients
-  -> scheduling.appointments
+  -> scheduling.appointments -> billing.services (dich vu tuy chon)
   -> clinical.medical_records
 
 clinical.medical_records

@@ -36,7 +36,7 @@ await new SqlCommand($"CREATE DATABASE [{name}]", admin).ExecuteNonQueryAsync();
 builder.InitialCatalog = name;
 var options = new DbContextOptionsBuilder<FoMedDbContext>().UseSqlServer(builder.ConnectionString).Options;
 FoMedDbContext Db() => new(options);
-AppointmentService Appointments(FoMedDbContext db) => new(new UnitOfWork(db, new UserRepository(db), new PatientRepository(db), new DoctorRepository(db), new SpecialtyRepository(db), new AppointmentRepository(db), new DoctorScheduleRepository(db)));
+AppointmentService Appointments(FoMedDbContext db) => new(new UnitOfWork(db, new UserRepository(db), new PatientRepository(db), new DoctorRepository(db), new SpecialtyRepository(db), new AppointmentRepository(db), new DoctorScheduleRepository(db), new ServiceRepository(db)));
 ClinicalService Clinical(FoMedDbContext db) { var repo = new ClinicRepository(db); return new(repo, new ClinicAccess(repo)); }
 BillingService Billing(FoMedDbContext db) { var repo = new ClinicRepository(db); return new(repo, new ClinicAccess(repo)); }
 async Task Expect(int status, Func<Task> action)
@@ -52,8 +52,12 @@ try
         sql = sql[sql.IndexOf("IF NOT EXISTS (SELECT 1 FROM sys.schemas", StringComparison.Ordinal)..];
         foreach (var batch in Regex.Split(sql, @"^\s*GO\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase))
             if (!string.IsNullOrWhiteSpace(batch)) await db.Database.ExecuteSqlRawAsync(batch);
+
+        var migration = File.ReadAllText("database/migrations/20260929_add_service_id_to_appointments.sql");
+        foreach (var batch in Regex.Split(migration, @"^\s*GO\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase))
+            if (!string.IsNullOrWhiteSpace(batch)) await db.Database.ExecuteSqlRawAsync(batch);
     }
-    int patientUser, otherPatientUser, doctorUser, otherDoctorUser, receptionistUser, technicianUser, doctorId, secondDoctorId, medicineId, serviceId;
+    int patientUser, otherPatientUser, doctorUser, otherDoctorUser, receptionistUser, technicianUser, doctorId, secondDoctorId, medicineId, serviceId, inactiveServiceId;
     var date = DateOnly.FromDateTime(ClinicTime.Now.AddDays(2));
     var start = date.ToDateTime(new TimeOnly(9, 0));
     await using (var db = Db())
@@ -75,18 +79,29 @@ try
         var r = User("Receptionist", "receptionist"); var t = User("Technician", "technician");
         var med = new Medicine { Name = "Test medicine", Unit = "tablet", Price = 10, IsActive = true };
         var svc = new Service { Name = "Test service", Price = 100, IsActive = true };
-        db.AddRange(med, svc);
+        var inactiveSvc = new Service { Name = "Inactive test service", Price = 200, IsActive = false };
+        db.AddRange(med, svc, inactiveSvc);
         await db.SaveChangesAsync();
         patientUser = p.Id; otherPatientUser = p2.Id; doctorUser = d.Id; otherDoctorUser = d2.Id; receptionistUser = r.Id; technicianUser = t.Id;
-        doctorId = d.Doctor.Id; secondDoctorId = d2.Doctor.Id; medicineId = med.Id; serviceId = svc.Id;
+        doctorId = d.Doctor.Id; secondDoctorId = d2.Doctor.Id; medicineId = med.Id; serviceId = svc.Id; inactiveServiceId = inactiveSvc.Id;
     }
-    async Task<FoMed.Application.DTO.HTTPResponseData<AppointmentResponse?>> Book(int uid, int did, DateTime time)
+    async Task<FoMed.Application.DTO.HTTPResponseData<AppointmentResponse?>> Book(int uid, int did, DateTime time, int? requestedServiceId = null)
     {
-        await using var db = Db(); return await Appointments(db).BookAppointmentAsync(uid, new() { DoctorId = did, StartTime = time });
+        await using var db = Db(); return await Appointments(db).BookAppointmentAsync(uid, new() { DoctorId = did, StartTime = time, ServiceId = requestedServiceId });
     }
     Check((await Book(patientUser, doctorId, start.AddMinutes(5))).StatusCode == 400, "Off-grid booking accepted");
     Check((await Book(patientUser, doctorId, start.AddMinutes(170))).StatusCode == 400, "Out-of-shift booking accepted");
     Check((await Book(patientUser, doctorId, ClinicTime.Now.AddDays(-1))).StatusCode == 400, "Past booking accepted");
+    var linkedAppointment = await Book(patientUser, doctorId, start.AddHours(2), serviceId);
+    Check(linkedAppointment.StatusCode == 201 && linkedAppointment.DataResponse?.ServiceId == serviceId && linkedAppointment.DataResponse.ServiceName == "Test service", "Service was not linked to appointment response");
+    Check((await Book(patientUser, doctorId, start.AddHours(2.5), int.MaxValue)).StatusCode == 404, "Unknown service accepted");
+    Check((await Book(patientUser, doctorId, start.AddHours(2.5), inactiveServiceId)).StatusCode == 404, "Inactive service accepted");
+    await using (var db = Db())
+    {
+        var patientAppointments = (await Appointments(db).GetPatientAppointmentsAsync(patientUser)).DataResponse;
+        var loadedLinkedAppointment = patientAppointments.Single(a => a.Id == linkedAppointment.DataResponse!.Id);
+        Check(loadedLinkedAppointment.ServiceId == serviceId && loadedLinkedAppointment.ServiceName == "Test service", "Service relation missing from patient appointment query");
+    }
     var concurrent = await Task.WhenAll(Book(patientUser, doctorId, start), Book(otherPatientUser, doctorId, start));
     Check(concurrent.Count(r => r.StatusCode == 201) == 1 && concurrent.Count(r => r.StatusCode == 409) == 1, "Concurrent booking not protected");
     var booked = concurrent.Single(r => r.StatusCode == 201).DataResponse!;

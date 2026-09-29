@@ -96,6 +96,10 @@ public sealed class AppointmentService(IUnitOfWork unitOfWork)
         if (!doctor.IsActive)
             return Fail<AppointmentResponse?>(AppointmentResponseMessageDTO.DoctorInactive, 400);
 
+        if (request.ServiceId.HasValue &&
+            await _unitOfWork.ServiceRepository.GetActiveByIdAsync(request.ServiceId.Value, cancellationToken) is null)
+            return Fail<AppointmentResponse?>(AppointmentResponseMessageDTO.ServiceNotFound, 404);
+
         request = request with { StartTime = ClinicTime.Normalize(request.StartTime) };
         if (request.StartTime <= ClinicTime.Now)
             return Fail<AppointmentResponse?>(AppointmentResponseMessageDTO.PastTimeNotAllowed, 400);
@@ -131,6 +135,7 @@ public sealed class AppointmentService(IUnitOfWork unitOfWork)
             AppointmentCode = code,
             PatientId = patient.Id,
             DoctorId = doctor.Id,
+            ServiceId = request.ServiceId,
             StartTime = request.StartTime,
             EndTime = endTime,
             Status = (byte)AppointmentStatus.Pending,
@@ -419,6 +424,7 @@ public sealed class AppointmentService(IUnitOfWork unitOfWork)
             a.Doctor.Specialty?.Name ?? "Chua xep", a.Doctor.Room,
             a.StartTime, a.EndTime,
             status, status.ToString(),
-            a.Reason, a.QueueNumber, a.CreatedAt);
+            a.Reason, a.QueueNumber, a.CreatedAt,
+            a.ServiceId, a.Service?.Name);
     }
 }

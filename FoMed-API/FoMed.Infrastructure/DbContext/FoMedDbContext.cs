@@ -97,6 +97,7 @@ public partial class FoMedDbContext : Microsoft.EntityFrameworkCore.DbContext
             entity.Property(e => e.Reason)
                 .HasMaxLength(500)
                 .HasColumnName("reason");
+            entity.Property(e => e.ServiceId).HasColumnName("service_id");
             entity.Property(e => e.Source).HasColumnName("source");
             entity.Property(e => e.StartTime).HasColumnName("start_time");
             entity.Property(e => e.Status).HasColumnName("status");
@@ -115,6 +116,10 @@ public partial class FoMedDbContext : Microsoft.EntityFrameworkCore.DbContext
                 .HasForeignKey(d => d.PatientId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_appointments_patient");
+
+            entity.HasOne(d => d.Service).WithMany(p => p.Appointments)
+                .HasForeignKey(d => d.ServiceId)
+                .HasConstraintName("FK_appointments_service");
         });
 
         modelBuilder.Entity<AppointmentStatusHistory>(entity =>

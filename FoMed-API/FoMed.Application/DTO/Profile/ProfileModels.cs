@@ -18,10 +18,12 @@ public sealed record ChangePasswordRequest
 public sealed record ProfileResponse(
     int UserId,
     string FullName,
-    string Email,
+    string? Email,
     string? Phone,
-    string Role,
-    bool IsActive);
+    string[] Roles,
+    bool IsActive,
+    int? DoctorId,
+    int? PatientId);
 
 public sealed record UpdateProfileRequest
 {

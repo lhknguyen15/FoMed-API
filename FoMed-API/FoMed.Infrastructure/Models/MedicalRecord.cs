@@ -19,6 +19,18 @@ public partial class MedicalRecord
 
     public string? Note { get; set; }
 
+    public string? VitalsJson { get; set; }
+
+    public string? Icd10Code { get; set; }
+
+    public string? TreatmentPlan { get; set; }
+
+    public DateOnly? FollowUpDate { get; set; }
+
+    public bool IsFinalized { get; set; }
+
+    public DateTime? FinalizedAt { get; set; }
+
     public DateTime CreatedAt { get; set; }
 
     public DateTime? UpdatedAt { get; set; }

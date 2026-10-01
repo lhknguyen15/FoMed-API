@@ -30,6 +30,16 @@ public sealed class PublicCatalogController(
         return StatusCode(response.StatusCode, response);
     }
 
+    [HttpGet("specialties")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(HTTPResponseData<IReadOnlyList<PublicSpecialtyResponse>>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<HTTPResponseData<IReadOnlyList<PublicSpecialtyResponse>>>> GetSpecialties(
+        CancellationToken cancellationToken)
+    {
+        var response = await doctorService.GetPublicSpecialtiesAsync(cancellationToken);
+        return StatusCode(response.StatusCode, response);
+    }
+
     [HttpGet("services")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(HTTPResponseData<IReadOnlyList<CatalogResponse>>), StatusCodes.Status200OK)]

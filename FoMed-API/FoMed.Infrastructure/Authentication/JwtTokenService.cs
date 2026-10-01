@@ -12,13 +12,20 @@ public sealed class JwtTokenService(IOptions<JwtOptions> options) : ITokenServic
     public string CreateToken(User user)
     {
         var jwt = options.Value;
-        var claims = new[]
+        var claims = new List<Claim>
         {
             new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
             new Claim(JwtRegisteredClaimNames.Email, user.Email ?? string.Empty),
             new Claim(ClaimTypes.Name, user.FullName ?? user.Username),
-            new Claim(ClaimTypes.Role, user.UserRoles.FirstOrDefault()?.Role.Name ?? "Patient")
+            new Claim(JwtRegisteredClaimNames.Name, user.FullName ?? user.Username)
         };
+        var roles = user.UserRoles
+            .Select(userRole => userRole.Role.Name)
+            .Where(role => !string.IsNullOrWhiteSpace(role))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        foreach (var role in roles.Length == 0 ? ["Patient"] : roles)
+            claims.Add(new Claim(ClaimTypes.Role, role));
 
         var credentials = new SigningCredentials(
             new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.Key)),

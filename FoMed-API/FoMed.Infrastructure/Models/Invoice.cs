@@ -19,6 +19,8 @@ public partial class Invoice
 
     public decimal TotalAmount { get; set; }
 
+    public decimal ConsultationFee { get; set; }
+
     public byte Status { get; set; }
 
     public int? CreatedBy { get; set; }

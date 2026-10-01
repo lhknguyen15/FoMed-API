@@ -15,6 +15,8 @@ public partial class Appointment
 
     public int? ServiceId { get; set; }
 
+    public decimal? FeeSnapshot { get; set; }
+
     public DateTime StartTime { get; set; }
 
     public DateTime EndTime { get; set; }

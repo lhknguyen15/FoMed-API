@@ -3,6 +3,7 @@ using FoMed.Infrastructure.Models;
 using FoMed.Infrastructure.Models.Enums;
 using FoMed.Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace FoMed.Application.Services.Clinical;
 
@@ -14,12 +15,15 @@ public sealed class ClinicalService(ClinicRepository repository, ClinicAccess ac
         var appointment = await repository.Query<Infrastructure.Models.Appointment>().SingleOrDefaultAsync(a => a.Id == appointmentId, ct)
             ?? throw new ClinicException(404, "Không tìm thấy lịch hẹn.");
         if (!await access.IsDoctorAsync(userId, appointment.DoctorId, ct)) throw new ClinicException(403, "Chỉ bác sĩ phụ trách được tạo bệnh án.");
-        if (appointment.Status != (byte)AppointmentStatus.Confirmed) throw new ClinicException(409, "Lịch hẹn phải được xác nhận trước khi bắt đầu khám.");
+        if (appointment.Status != (byte)AppointmentStatus.Confirmed || !appointment.CheckedInAt.HasValue)
+            throw new ClinicException(409, "Bệnh nhân phải được lễ tân check-in trước khi bắt đầu khám.");
         if (await repository.Query<MedicalRecord>().AnyAsync(r => r.AppointmentId == appointmentId, ct)) throw new ClinicException(409, "Lịch hẹn đã có bệnh án.");
         var record = new MedicalRecord
         {
             AppointmentId = appointmentId, PatientId = appointment.PatientId, DoctorId = appointment.DoctorId,
-            Symptoms = request.Symptoms, Diagnosis = request.Diagnosis, Note = request.Note, CreatedAt = DateTime.UtcNow
+            Symptoms = request.Symptoms, Diagnosis = request.Diagnosis, Note = request.Note,
+            VitalsJson = SerializeVitals(request.VitalSigns), Icd10Code = request.Icd10Code,
+            TreatmentPlan = request.TreatmentPlan, FollowUpDate = request.FollowUpDate, CreatedAt = DateTime.UtcNow
         };
         repository.Add(record);
         repository.Add(new AppointmentStatusHistory
@@ -44,9 +48,12 @@ public sealed class ClinicalService(ClinicRepository repository, ClinicAccess ac
     {
         if (page < 1 || page > 100000) throw new ClinicException(400, "Trang không hợp lệ.");
         var query = repository.Query<MedicalRecord>().AsNoTracking().Where(r =>
-            (r.Patient.UserId == userId && r.Patient.IsActive && r.Patient.User!.IsActive) ||
+            (r.Patient.UserId == userId && r.Patient.IsActive && r.Patient.User!.IsActive &&
+             r.Appointment.Status == (byte)AppointmentStatus.Completed) ||
             (r.Doctor.UserId == userId && r.Doctor.IsActive && r.Doctor.User.IsActive && r.Doctor.User.UserRoles.Any(ur => ur.Role.Name == "Doctor")));
         var list = await query.OrderByDescending(r => r.Id).Skip((page - 1) * 20).Take(20).ToListAsync(ct);
+        repository.Add(new AuditLog { UserId = userId, Action = "Read", Entity = "MedicalRecord", NewValue = $"list page={page};count={list.Count}", CreatedAt = DateTime.UtcNow });
+        await repository.SaveAsync(ct);
         return list.Select(Map).ToList();
     }
 
@@ -55,6 +62,8 @@ public sealed class ClinicalService(ClinicRepository repository, ClinicAccess ac
         await using var write = await repository.BeginWriteAsync(ct);
         var record = await GetEditableAsync(userId, recordId, ct);
         record.Symptoms = request.Symptoms; record.Diagnosis = request.Diagnosis; record.Note = request.Note;
+        record.VitalsJson = SerializeVitals(request.VitalSigns); record.Icd10Code = request.Icd10Code;
+        record.TreatmentPlan = request.TreatmentPlan; record.FollowUpDate = request.FollowUpDate;
         record.UpdatedAt = DateTime.UtcNow;
         await repository.SaveAsync(ct);
         await write.CommitAsync(ct);
@@ -64,21 +73,30 @@ public sealed class ClinicalService(ClinicRepository repository, ClinicAccess ac
     public async Task<PrescriptionResponse> CreatePrescriptionAsync(int userId, int recordId, CreatePrescriptionRequest request, CancellationToken ct)
     {
         await using var write = await repository.BeginWriteAsync(ct);
-        await GetEditableAsync(userId, recordId, ct);
-        if (request.Items is null || request.Items.Count == 0 || request.Items.Any(i => i is null || i.Quantity <= 0) || request.Items.Select(i => i.MedicineId).Distinct().Count() != request.Items.Count)
-            throw new ClinicException(400, "Đơn thuốc phải có số lượng dương và không lặp thuốc.");
+        var record = await GetEditableAsync(userId, recordId, ct);
+        ValidatePrescription(request);
         if (await repository.Query<Prescription>().AnyAsync(p => p.MedicalRecordId == recordId, ct)) throw new ClinicException(409, "Bệnh án đã có đơn thuốc.");
+        EnsureAllergyAcknowledged(record, request);
         var prescription = new Prescription { MedicalRecordId = recordId, Note = request.Note, CreatedAt = DateTime.UtcNow };
-        foreach (var item in request.Items)
-        {
-            var medicine = await repository.Query<Medicine>().SingleOrDefaultAsync(m => m.Id == item.MedicineId && m.IsActive, ct)
-                ?? throw new ClinicException(404, "Thuốc không tồn tại hoặc đã ngừng sử dụng.");
-            prescription.PrescriptionItems.Add(new PrescriptionItem
-            {
-                Medicine = medicine, Quantity = item.Quantity, Dosage = item.Dosage, Instruction = item.Instruction
-            });
-        }
+        await FillPrescriptionItemsAsync(prescription, request, ct);
         repository.Add(prescription);
+        await repository.SaveAsync(ct);
+        await write.CommitAsync(ct);
+        return Map(prescription);
+    }
+
+    public async Task<PrescriptionResponse> UpdatePrescriptionAsync(int userId, int recordId, CreatePrescriptionRequest request, CancellationToken ct)
+    {
+        await using var write = await repository.BeginWriteAsync(ct);
+        var record = await GetEditableAsync(userId, recordId, ct);
+        ValidatePrescription(request);
+        EnsureAllergyAcknowledged(record, request);
+        var prescription = await repository.Query<Prescription>().SingleOrDefaultAsync(p => p.MedicalRecordId == recordId, ct)
+            ?? throw new ClinicException(404, "Chưa có đơn thuốc để cập nhật.");
+        await repository.Query<PrescriptionItem>().Where(i => i.PrescriptionId == prescription.Id).ExecuteDeleteAsync(ct);
+        prescription.Note = request.Note;
+        prescription.PrescriptionItems.Clear();
+        await FillPrescriptionItemsAsync(prescription, request, ct);
         await repository.SaveAsync(ct);
         await write.CommitAsync(ct);
         return Map(prescription);
@@ -100,7 +118,11 @@ public sealed class ClinicalService(ClinicRepository repository, ClinicAccess ac
             ?? throw new ClinicException(404, "Không tìm thấy dịch vụ đang hoạt động.");
         if (await repository.Query<MedicalRecordService>().AnyAsync(o => o.MedicalRecordId == recordId && o.ServiceId == request.ServiceId && o.Status != 2, ct))
             throw new ClinicException(409, "Dịch vụ đã được chỉ định.");
-        var order = new MedicalRecordService { MedicalRecordId = recordId, Service = service, OrderedBy = record.DoctorId, OrderedAt = DateTime.UtcNow };
+        var order = new MedicalRecordService
+        {
+            MedicalRecordId = recordId, Service = service, OrderedBy = record.DoctorId,
+            Quantity = request.Quantity, UnitPriceSnapshot = service.Price, OrderedAt = DateTime.UtcNow
+        };
         repository.Add(order);
         await repository.SaveAsync(ct);
         await write.CommitAsync(ct);
@@ -128,8 +150,29 @@ public sealed class ClinicalService(ClinicRepository repository, ClinicAccess ac
         var order = await repository.Query<MedicalRecordService>().Include(o => o.Service).Include(o => o.LabResult)
             .SingleOrDefaultAsync(o => o.Id == orderId, ct) ?? throw new ClinicException(404, "Không tìm thấy chỉ định.");
         if (order.Status != 0 || order.LabResult != null) throw new ClinicException(409, "Chỉ định đã hoàn thành hoặc bị hủy.");
-        order.LabResult = new LabResult { ResultSummary = request.ResultSummary, Conclusion = request.Conclusion, TechnicianId = userId, ResultAt = DateTime.UtcNow };
+        order.LabResult = new LabResult
+        {
+            ResultSummary = request.ResultSummary, Conclusion = request.Conclusion,
+            ReferenceRange = request.ReferenceRange, TechnicianId = userId, ResultAt = DateTime.UtcNow
+        };
         order.Status = 1;
+        await repository.SaveAsync(ct);
+        await write.CommitAsync(ct);
+        return Map(order);
+    }
+
+    public async Task<ServiceOrderResponse> CancelOrderAsync(int userId, int orderId, CancellationToken ct)
+    {
+        await using var write = await repository.BeginWriteAsync(ct);
+        var order = await repository.Query<MedicalRecordService>().Include(o => o.MedicalRecord)
+            .Include(o => o.Service).Include(o => o.LabResult)
+            .SingleOrDefaultAsync(o => o.Id == orderId, ct)
+            ?? throw new ClinicException(404, "Khong tim thay chi dinh.");
+        if (!await access.IsDoctorAsync(userId, order.MedicalRecord.DoctorId, ct))
+            throw new ClinicException(403, "Chi bac si phu trach duoc huy chi dinh.");
+        if (order.Status != 0 || order.LabResult is not null)
+            throw new ClinicException(409, "Chi co the huy chi dinh dang cho.");
+        order.Status = 2;
         await repository.SaveAsync(ct);
         await write.CommitAsync(ct);
         return Map(order);
@@ -146,19 +189,60 @@ public sealed class ClinicalService(ClinicRepository repository, ClinicAccess ac
     private IQueryable<MedicalRecordService> Orders() => repository.Query<MedicalRecordService>().AsNoTracking().Include(o => o.Service).Include(o => o.LabResult);
     private async Task<MedicalRecord> GetReadableAsync(int userId, int recordId, CancellationToken ct)
     {
-        var record = await repository.Query<MedicalRecord>().SingleOrDefaultAsync(r => r.Id == recordId, ct) ?? throw new ClinicException(404, "Không tìm thấy bệnh án.");
+        var record = await repository.Query<MedicalRecord>().Include(r => r.Appointment).SingleOrDefaultAsync(r => r.Id == recordId, ct) ?? throw new ClinicException(404, "Không tìm thấy bệnh án.");
         if (!await access.CanReadAsync(userId, record.PatientId, record.DoctorId, ct)) throw new ClinicException(403, "Không có quyền xem bệnh án.");
+        if (record.Appointment.Status != (byte)AppointmentStatus.Completed &&
+            await access.IsPatientOwnerAsync(userId, record.PatientId, ct))
+            throw new ClinicException(403, "Bệnh án chưa được chốt, chưa thể xem từ tài khoản bệnh nhân.");
+        repository.Add(new AuditLog { UserId = userId, Action = "Read", Entity = "MedicalRecord", EntityId = recordId, CreatedAt = DateTime.UtcNow });
+        await repository.SaveAsync(ct);
         return record;
     }
     private async Task<MedicalRecord> GetEditableAsync(int userId, int recordId, CancellationToken ct)
     {
-        var record = await repository.Query<MedicalRecord>().Include(r => r.Appointment).SingleOrDefaultAsync(r => r.Id == recordId, ct)
+        var record = await repository.Query<MedicalRecord>().Include(r => r.Appointment).Include(r => r.Patient).SingleOrDefaultAsync(r => r.Id == recordId, ct)
             ?? throw new ClinicException(404, "Không tìm thấy bệnh án.");
         if (!await access.IsDoctorAsync(userId, record.DoctorId, ct)) throw new ClinicException(403, "Chỉ bác sĩ phụ trách được sửa bệnh án.");
+        if (record.IsFinalized) throw new ClinicException(409, "Benh an da chot, khong the sua.");
         if (record.Appointment.Status != (byte)AppointmentStatus.InProgress) throw new ClinicException(409, "Chỉ được sửa khi đang khám.");
         return record;
     }
-    private static MedicalRecordResponse Map(MedicalRecord r) => new(r.Id, r.AppointmentId, r.PatientId, r.DoctorId, r.Symptoms, r.Diagnosis, r.Note, r.CreatedAt, r.UpdatedAt);
-    private static PrescriptionResponse Map(Prescription p) => new(p.Id, p.MedicalRecordId, p.Note, p.PrescriptionItems.Select(i => new PrescriptionLineResponse(i.MedicineId, i.Medicine.Name, i.Quantity, i.Dosage, i.Instruction)).ToList());
-    private static ServiceOrderResponse Map(MedicalRecordService o) => new(o.Id, o.MedicalRecordId, o.ServiceId, o.Service.Name, o.Status, o.LabResult?.ResultSummary, o.LabResult?.Conclusion, o.LabResult?.ResultAt);
+    private static MedicalRecordResponse Map(MedicalRecord r) => new(r.Id, r.AppointmentId, r.PatientId, r.DoctorId,
+        r.Symptoms, r.Diagnosis, r.Note, DeserializeVitals(r.VitalsJson), r.Icd10Code, r.TreatmentPlan,
+        r.FollowUpDate, r.IsFinalized, r.FinalizedAt, r.CreatedAt, r.UpdatedAt);
+    private static PrescriptionResponse Map(Prescription p) => new(p.Id, p.MedicalRecordId, p.Note, p.PrescriptionItems.Select(i => new PrescriptionLineResponse(i.MedicineId, i.Medicine.Name, i.Quantity, i.UnitPriceSnapshot, i.Dosage, i.Instruction)).ToList());
+    private static ServiceOrderResponse Map(MedicalRecordService o) => new(o.Id, o.MedicalRecordId, o.ServiceId, o.Service.Name,
+        o.Status, o.Quantity, o.UnitPriceSnapshot, o.LabResult?.ResultSummary, o.LabResult?.Conclusion,
+        o.LabResult?.ReferenceRange, o.LabResult?.ResultAt);
+    private static string? SerializeVitals(VitalSignsRequest? vitals) => vitals is null ? null : JsonSerializer.Serialize(vitals);
+    private static VitalSignsRequest? DeserializeVitals(string? json) => string.IsNullOrWhiteSpace(json)
+        ? null : JsonSerializer.Deserialize<VitalSignsRequest>(json);
+
+    private static void ValidatePrescription(CreatePrescriptionRequest request)
+    {
+        if (request.Items is null || request.Items.Count == 0 || request.Items.Any(i => i is null || i.Quantity <= 0) || request.Items.Select(i => i.MedicineId).Distinct().Count() != request.Items.Count)
+            throw new ClinicException(400, "Đơn thuốc phải có số lượng dương và không lặp thuốc.");
+    }
+
+    private static void EnsureAllergyAcknowledged(MedicalRecord record, CreatePrescriptionRequest request)
+    {
+        if (!string.IsNullOrWhiteSpace(record.Patient.Allergies) && !request.AllergyAcknowledged)
+            throw new ClinicException(409, "Bệnh nhân có thông tin dị ứng. Bác sĩ phải xác nhận đã kiểm tra trước khi kê đơn.");
+    }
+
+    private async Task FillPrescriptionItemsAsync(Prescription prescription, CreatePrescriptionRequest request, CancellationToken ct)
+    {
+        var ids = request.Items.Select(i => i.MedicineId).ToArray();
+        var medicines = await repository.Query<Medicine>().Where(m => ids.Contains(m.Id) && m.IsActive).ToDictionaryAsync(m => m.Id, ct);
+        if (medicines.Count != ids.Length) throw new ClinicException(404, "Thuốc không tồn tại hoặc đã ngừng sử dụng.");
+        foreach (var item in request.Items)
+        {
+            var medicine = medicines[item.MedicineId];
+            prescription.PrescriptionItems.Add(new PrescriptionItem
+            {
+                Medicine = medicine, Quantity = item.Quantity, UnitPriceSnapshot = medicine.Price,
+                Dosage = item.Dosage, Instruction = item.Instruction
+            });
+        }
+    }
 }

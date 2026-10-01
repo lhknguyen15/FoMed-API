@@ -15,6 +15,8 @@ public partial class PrescriptionItem
 
     public int Quantity { get; set; }
 
+    public decimal UnitPriceSnapshot { get; set; }
+
     public string? Dosage { get; set; }
 
     public string? Instruction { get; set; }
@@ -24,4 +26,6 @@ public partial class PrescriptionItem
     public virtual Medicine Medicine { get; set; } = null!;
 
     public virtual Prescription Prescription { get; set; } = null!;
+
+    public virtual ICollection<PrescriptionDispense> PrescriptionDispenses { get; set; } = new List<PrescriptionDispense>();
 }

@@ -10,6 +10,9 @@ public interface ISpecialtyRepository : IRepositoryBase<Specialty>
     Task<Specialty?> GetActiveByIdAsync(
         int specialtyId,
         CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<Specialty>> GetActiveAsync(
+        CancellationToken cancellationToken = default);
 }
 
 public sealed class SpecialtyRepository(FoMedDbContext dbContext)
@@ -25,4 +28,12 @@ public sealed class SpecialtyRepository(FoMedDbContext dbContext)
             .SingleOrDefaultAsync(
                 specialty => specialty.Id == specialtyId && specialty.IsActive,
                 cancellationToken);
+
+    public async Task<IReadOnlyList<Specialty>> GetActiveAsync(
+        CancellationToken cancellationToken = default) =>
+        await dbContext.Specialties
+            .AsNoTracking()
+            .Where(specialty => specialty.IsActive)
+            .OrderBy(specialty => specialty.Name)
+            .ToListAsync(cancellationToken);
 }

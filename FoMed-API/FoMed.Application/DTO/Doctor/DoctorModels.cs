@@ -23,6 +23,11 @@ public sealed record PublicDoctorResponse(
     string? Title,
     decimal ConsultationFee);
 
+public sealed record PublicSpecialtyResponse(
+    int SpecialtyId,
+    string Name,
+    string? Description);
+
 public sealed record UpdateDoctorProfileRequest
 {
     [Required]

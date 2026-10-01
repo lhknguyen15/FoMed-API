@@ -24,10 +24,14 @@ public sealed class ClinicalController(ClinicalService service) : ControllerBase
     public async Task<IActionResult> Update(int id, SaveMedicalRecordRequest request, CancellationToken ct) => Result(await service.UpdateRecordAsync(UserId, id, request, ct));
     [HttpPost("records/{id:int}/prescription"), Authorize(Roles = "Doctor")]
     public async Task<IActionResult> Prescribe(int id, CreatePrescriptionRequest request, CancellationToken ct) => Result(await service.CreatePrescriptionAsync(UserId, id, request, ct), 201);
+    [HttpPut("records/{id:int}/prescription"), Authorize(Roles = "Doctor")]
+    public async Task<IActionResult> UpdatePrescription(int id, CreatePrescriptionRequest request, CancellationToken ct) => Result(await service.UpdatePrescriptionAsync(UserId, id, request, ct));
     [HttpGet("records/{id:int}/prescription")]
     public async Task<IActionResult> Prescription(int id, CancellationToken ct) => Result(await service.GetPrescriptionAsync(UserId, id, ct));
     [HttpPost("records/{id:int}/services"), Authorize(Roles = "Doctor")]
     public async Task<IActionResult> Order(int id, OrderServiceRequest request, CancellationToken ct) => Result(await service.OrderServiceAsync(UserId, id, request, ct), 201);
+    [HttpPut("orders/{id:int}/cancel"), Authorize(Roles = "Doctor")]
+    public async Task<IActionResult> CancelOrder(int id, CancellationToken ct) => Result(await service.CancelOrderAsync(UserId, id, ct));
     [HttpGet("records/{id:int}/services")]
     public async Task<IActionResult> Orders(int id, CancellationToken ct) => Result(await service.GetOrdersAsync(UserId, id, ct));
     [HttpGet("lab-orders"), Authorize(Roles = "Technician")]

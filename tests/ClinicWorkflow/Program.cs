@@ -5,6 +5,7 @@ using FoMed.Application.DTO.Clinical;
 using FoMed.Application.DTO.Billing;
 using FoMed.Application.Services.Appointment;
 using FoMed.Application.Services.Clinical;
+using FoMed.Application.Services.Billing;
 using FoMed.Infrastructure.DbContext;
 using FoMed.Infrastructure.Models;
 using FoMed.Infrastructure.Models.Enums;
@@ -56,6 +57,10 @@ try
         var migration = File.ReadAllText("database/migrations/20260929_add_service_id_to_appointments.sql");
         foreach (var batch in Regex.Split(migration, @"^\s*GO\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase))
             if (!string.IsNullOrWhiteSpace(batch)) await db.Database.ExecuteSqlRawAsync(batch);
+
+        var feeMigration = File.ReadAllText("database/migrations/20260930_add_fee_snapshot_to_appointments.sql");
+        foreach (var batch in Regex.Split(feeMigration, @"^\s*GO\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase))
+            if (!string.IsNullOrWhiteSpace(batch)) await db.Database.ExecuteSqlRawAsync(batch);
     }
     int patientUser, otherPatientUser, doctorUser, otherDoctorUser, receptionistUser, technicianUser, doctorId, secondDoctorId, medicineId, serviceId, inactiveServiceId;
     var date = DateOnly.FromDateTime(ClinicTime.Now.AddDays(2));
@@ -93,7 +98,9 @@ try
     Check((await Book(patientUser, doctorId, start.AddMinutes(170))).StatusCode == 400, "Out-of-shift booking accepted");
     Check((await Book(patientUser, doctorId, ClinicTime.Now.AddDays(-1))).StatusCode == 400, "Past booking accepted");
     var linkedAppointment = await Book(patientUser, doctorId, start.AddHours(2), serviceId);
-    Check(linkedAppointment.StatusCode == 201 && linkedAppointment.DataResponse?.ServiceId == serviceId && linkedAppointment.DataResponse.ServiceName == "Test service", "Service was not linked to appointment response");
+    Check(linkedAppointment.StatusCode == 201 && linkedAppointment.DataResponse?.ServiceId == serviceId && linkedAppointment.DataResponse.ServiceName == "Test service" &&
+        linkedAppointment.DataResponse.FeeSnapshot == 100 && linkedAppointment.DataResponse.Source == 0,
+        "Service, fee snapshot or source was not linked to appointment response");
     Check((await Book(patientUser, doctorId, start.AddHours(2.5), int.MaxValue)).StatusCode == 404, "Unknown service accepted");
     Check((await Book(patientUser, doctorId, start.AddHours(2.5), inactiveServiceId)).StatusCode == 404, "Inactive service accepted");
     await using (var db = Db())
@@ -109,28 +116,59 @@ try
     var stranger = owner == patientUser ? otherPatientUser : patientUser;
     Check((await Book(owner, secondDoctorId, start)).StatusCode == 409, "Patient overlap not protected");
     var more = await Task.WhenAll(Book(owner, doctorId, start.AddMinutes(30)), Book(stranger, doctorId, start.AddMinutes(60)));
-    Check(more.All(r => r.StatusCode == 201) && more.Select(r => r.DataResponse!.QueueNumber).Distinct().Count() == 2, "Concurrent queue allocation failed");
+    Check(more.All(r => r.StatusCode == 201 && r.DataResponse!.QueueNumber is null), "Queue number assigned before patient check-in");
     Check(more.Select(r => r.DataResponse!.AppointmentCode).Append(booked.AppointmentCode).Distinct().Count() == 3, "Duplicate appointment codes");
     await using (var db = Db()) Check((await Appointments(db).ConfirmAppointmentAsync(otherDoctorUser, booked.Id, new())).StatusCode == 403, "Foreign doctor confirmation");
     await using (var db = Db()) Check((await Appointments(db).ConfirmAppointmentAsync(receptionistUser, booked.Id, new())).StatusCode == 200, "Receptionist confirmation");
     await using (var db = Db()) Check((await Appointments(db).ConfirmAppointmentAsync(receptionistUser, booked.Id, new())).StatusCode == 400, "Repeated confirmation");
+    await using (var db = Db()) Check((await Appointments(db).CompleteAppointmentAsync(doctorUser, booked.Id, new())).StatusCode == 409, "Confirmed appointment completed before consultation");
+    await using (var db = Db())
+    {
+        var inProgressWithoutRecord = await db.Appointments.SingleAsync(a => a.Id == booked.Id);
+        inProgressWithoutRecord.Status = (byte)AppointmentStatus.InProgress;
+        await db.SaveChangesAsync();
+    }
+    await using (var db = Db()) Check((await Appointments(db).CompleteAppointmentAsync(doctorUser, booked.Id, new())).StatusCode == 409, "Appointment without medical record completed");
+    await using (var db = Db())
+    {
+        var confirmed = await db.Appointments.SingleAsync(a => a.Id == booked.Id);
+        confirmed.Status = (byte)AppointmentStatus.Confirmed;
+        confirmed.StartTime = DateOnly.FromDateTime(ClinicTime.Now).ToDateTime(new TimeOnly(23, 0));
+        confirmed.EndTime = confirmed.StartTime.AddMinutes(30);
+        await db.SaveChangesAsync();
+    }
+    await using (var db = Db())
+    {
+        var checkedIn = await Appointments(db).CheckInAppointmentAsync(receptionistUser, booked.Id, new());
+        Check(checkedIn.StatusCode == 200 && checkedIn.DataResponse?.QueueNumber == 1 && checkedIn.DataResponse.CheckedInAt.HasValue, "Reception check-in did not assign queue number");
+    }
+    await using (var db = Db()) Check((await Appointments(db).CheckInAppointmentAsync(receptionistUser, booked.Id, new())).StatusCode == 409, "Repeated check-in accepted");
+    await using (var db = Db())
+    {
+        var queue = await Appointments(db).GetWaitingQueueAsync(receptionistUser, DateOnly.FromDateTime(ClinicTime.Now));
+        Check(queue.StatusCode == 200 && queue.DataResponse?.Single().Id == booked.Id, "Waiting queue included unchecked appointments or omitted check-in");
+    }
     MedicalRecordResponse record;
     await using (var db = Db()) record = await Clinical(db).CreateRecordAsync(doctorUser, booked.Id, new() { Symptoms = "Test" }, default);
+    await using (var db = Db()) Check((await Appointments(db).CompleteAppointmentAsync(doctorUser, booked.Id, new())).StatusCode == 409, "Appointment without diagnosis completed");
+    await using (var db = Db()) await Clinical(db).UpdateRecordAsync(doctorUser, record.Id, new() { Symptoms = "Test", Diagnosis = "Test diagnosis" }, default);
     await using (var db = Db()) await Expect(403, () => Clinical(db).GetRecordAsync(stranger, record.Id, default));
     await using (var db = Db()) await Expect(403, () => Clinical(db).UpdateRecordAsync(otherDoctorUser, record.Id, new(), default));
-    await using (var db = Db()) Check((await Clinical(db).GetRecordAsync(owner, record.Id, default)).Id == record.Id, "Patient record access");
+    await using (var db = Db()) await Expect(403, () => Clinical(db).GetRecordAsync(owner, record.Id, default));
     await using (var db = Db()) await Clinical(db).CreatePrescriptionAsync(doctorUser, record.Id, new() { Items = [new() { MedicineId = medicineId, Quantity = 2, Dosage = "Test dosage" }] }, default);
     await using (var db = Db()) await Expect(409, () => Clinical(db).CreatePrescriptionAsync(doctorUser, record.Id, new() { Items = [new() { MedicineId = medicineId, Quantity = 1, Dosage = "Test" }] }, default));
     ServiceOrderResponse order;
     await using (var db = Db()) order = await Clinical(db).OrderServiceAsync(doctorUser, record.Id, new() { ServiceId = serviceId }, default);
+    await using (var db = Db()) Check((await Appointments(db).CompleteAppointmentAsync(doctorUser, booked.Id, new())).StatusCode == 409, "Appointment with pending order completed");
     await using (var db = Db()) await Expect(403, () => Clinical(db).SaveResultAsync(owner, order.Id, new() { ResultSummary = "Test" }, default));
     await using (var db = Db()) await Clinical(db).SaveResultAsync(technicianUser, order.Id, new() { ResultSummary = "Test" }, default);
     await using (var db = Db()) Check((await Appointments(db).CompleteAppointmentAsync(doctorUser, booked.Id, new())).StatusCode == 200, "Completion");
+    await using (var db = Db()) Check((await Clinical(db).GetRecordAsync(owner, record.Id, default)).Id == record.Id, "Patient finalized record access");
     await using (var db = Db()) Check((await Appointments(db).CompleteAppointmentAsync(doctorUser, booked.Id, new())).StatusCode == 400, "Repeated completion");
-    await using (var db = Db()) Check((await Appointments(db).CancelAppointmentAsync(owner, booked.Id, new())).StatusCode == 400, "Cancelled completed appointment");
+    await using (var db = Db()) Check((await Appointments(db).CancelAppointmentAsync(owner, booked.Id, new CancelAppointmentRequest { Reason = "Test" })).StatusCode == 400, "Cancelled completed appointment");
     var cancellable = more[0].DataResponse!;
-    await using (var db = Db()) Check((await Appointments(db).CancelAppointmentAsync(stranger, cancellable.Id, new())).StatusCode == 403, "Stranger cancellation");
-    await using (var db = Db()) Check((await Appointments(db).CancelAppointmentAsync(owner, cancellable.Id, new())).StatusCode == 200, "Owner cancellation");
+    await using (var db = Db()) Check((await Appointments(db).CancelAppointmentAsync(stranger, cancellable.Id, new CancelAppointmentRequest { Reason = "Test" })).StatusCode == 403, "Stranger cancellation");
+    await using (var db = Db()) Check((await Appointments(db).CancelAppointmentAsync(owner, cancellable.Id, new CancelAppointmentRequest { Reason = "Test" })).StatusCode == 200, "Owner cancellation");
     await using (var db = Db()) Check((await Appointments(db).ConfirmAppointmentAsync(receptionistUser, cancellable.Id, new())).StatusCode == 400, "Confirmed cancelled appointment");
     Check((await Book(stranger, doctorId, start.AddMinutes(30))).StatusCode == 201, "Cancelled slot was not released");
     await using (var db = Db()) Check((await Appointments(db).GetStatusHistoryAsync(stranger, booked.Id)).StatusCode == 403, "Stranger history access");
@@ -138,6 +176,7 @@ try
     InvoiceResponse invoice;
     await using (var db = Db()) invoice = await Billing(db).CreateAsync(receptionistUser, new() { MedicalRecordId = record.Id }, default);
     Check(invoice.TotalAmount == 120, "Incorrect server-side total");
+    Check(invoice.RemainingAmount == 120 && invoice.StatusName == "Chưa thanh toán", "Invoice balance/status projection is incorrect");
     await using (var db = Db()) await Expect(409, () => Billing(db).CreateAsync(receptionistUser, new() { MedicalRecordId = record.Id }, default));
     await using (var db = Db()) await Expect(403, () => Billing(db).GetAsync(stranger, invoice.Id, default));
     await using (var db = Db()) await Expect(400, () => Billing(db).PayAsync(receptionistUser, invoice.Id, new() { Amount = 121 }, default));
@@ -151,8 +190,8 @@ try
     await using (var db = Db())
     {
         var paid = await Billing(db).GetAsync(owner, invoice.Id, default);
-        Check(paid.Status == 1 && paid.PaidAmount == 120 && paid.Payments.Count == 1, "Incorrect final payment");
-        Check(await db.AppointmentStatusHistories.CountAsync(h => h.AppointmentId == booked.Id) == 4, "Incorrect transition history");
+        Check(paid.Status == 1 && paid.PaidAmount == 120 && paid.RemainingAmount == 0 && paid.StatusName == "Đã thanh toán" && paid.Payments.Count == 1, "Incorrect final payment");
+        Check(await db.AppointmentStatusHistories.CountAsync(h => h.AppointmentId == booked.Id) == 5, "Incorrect transition history");
     }
     Console.WriteLine($"PASS: {checks} checks including SQL concurrency, clinical ownership, prescriptions, lab results and billing.");
 }

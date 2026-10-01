@@ -9,7 +9,7 @@ Chay dung thu tu sau trong SQL Server Management Studio, Azure Data Studio hoac 
 1. `fomed-create-database.sql`
 2. `fomed-seed-data.sql`
 
-Voi database da tao tu truoc, chay cac script trong `migrations` theo thu tu ten file. Script them `service_id` vao lich hen duoc thiet ke de giu nguyen du lieu cu (cac lich hien tai se co `service_id = NULL`).
+Voi database da tao tu truoc, chay cac script trong `migrations` theo thu tu ten file. Migration `20261001_add_prescription_snapshot_and_pharmacy.sql` them gia snapshot, bang phat thuoc va role Pharmacist; migration `20261002_add_receipts_and_admin_schedule.sql` them phieu nhap nhieu dong. Các bảng lịch nghỉ đã có trong schema gốc.
 
 Script seed phu thuoc vao database `FoMedDb`, cac schema, bang, sequence va role duoc tao boi script thu nhat.
 
@@ -26,8 +26,9 @@ Database duoc chia thanh cac schema:
 
 - `auth`: users, roles, user_roles, refresh_tokens.
 - `audit`: audit_logs.
+- VC-21 bổ sung `billing.services.code`, `specialty_id`, `duration_minutes` bằng migration `20261003_add_service_catalog_fields.sql`.
 - `scheduling`: specialties, doctors, patients, doctor_schedules, doctor_time_off, appointments, appointment_status_history.
-- `clinical`: medical_records, medicines, medicine_batches, stock_transactions, prescriptions, prescription_items, medical_record_services, lab_results, attachments.
+- `clinical`: medical_records, medicines, medicine_batches, stock_transactions, inventory_receipts, inventory_receipt_items, prescriptions, prescription_items, prescription_dispenses, medical_record_services, lab_results, attachments.
 - `billing`: services, invoices, invoice_items, payments.
 
 ## Quan he nghiep vu chinh
@@ -56,8 +57,8 @@ billing.invoices
 
 Script `fomed-seed-data.sql` tao du lieu test cho:
 
-- 5 role: `Admin`, `Receptionist`, `Doctor`, `Technician`, `Patient`.
-- 9 tai khoan test.
+- 6 role: `Admin`, `Receptionist`, `Doctor`, `Technician`, `Pharmacist`, `Patient`.
+- Tai khoan test co them `duoc01` cho luong kho/duoc.
 - 3 chuyen khoa.
 - 3 bac si.
 - Lich lam viec tu thu 2 den thu 6.

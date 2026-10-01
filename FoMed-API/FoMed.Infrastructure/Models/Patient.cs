@@ -21,6 +21,16 @@ public partial class Patient
 
     public string? Address { get; set; }
 
+    public string? NationalId { get; set; }
+
+    public string? InsuranceNumber { get; set; }
+
+    public string? EmergencyContactName { get; set; }
+
+    public string? EmergencyContactPhone { get; set; }
+
+    public string? Allergies { get; set; }
+
     public bool IsActive { get; set; }
 
     public DateTime CreatedAt { get; set; }

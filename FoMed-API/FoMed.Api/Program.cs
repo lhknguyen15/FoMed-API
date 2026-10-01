@@ -21,7 +21,14 @@ builder.Services.AddProblemDetails();
 builder.Services.AddScoped<ClinicRepository>();
 builder.Services.AddScoped<FoMed.Application.Services.Clinical.ClinicAccess>();
 builder.Services.AddScoped<FoMed.Application.Services.Clinical.ClinicalService>();
-builder.Services.AddScoped<FoMed.Application.Services.Clinical.BillingService>();
+builder.Services.AddScoped<FoMed.Application.Services.Billing.BillingService>();
+builder.Services.AddScoped<FoMed.Application.Services.Pharmacy.PharmacyService>();
+builder.Services.AddScoped<FoMed.Application.Services.Doctor.DoctorAdminService>();
+builder.Services.AddScoped<FoMed.Application.Services.Doctor.DoctorTimeOffService>();
+builder.Services.AddScoped<FoMed.Application.Services.Billing.ServiceCatalogAdminService>();
+builder.Services.AddScoped<AdminUserService>();
+builder.Services.AddScoped<AuditLogService>();
+builder.Services.AddScoped<FoMed.Application.Services.Billing.ReportService>();
 builder.Services.AddEndpointsApiExplorer();
 
 // Kết nối database SQL Server theo chuỗi ConnectionStrings:DefaultConnection.
@@ -52,6 +59,7 @@ builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<FoMed.Application.Services.Appointment.AppointmentService>();
 builder.Services.AddScoped<FoMed.Application.Services.Profile.ProfileService>();
 builder.Services.AddScoped<FoMed.Application.Services.Patient.PatientService>();
+builder.Services.AddScoped<FoMed.Application.Services.Patient.PatientStaffService>();
 builder.Services.AddScoped<FoMed.Application.Services.Doctor.DoctorService>();
 builder.Services.AddScoped<FoMed.Application.Services.Doctor.DoctorScheduleService>();
 

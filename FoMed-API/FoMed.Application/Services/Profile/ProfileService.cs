@@ -99,8 +99,14 @@ public sealed class ProfileService(IUnitOfWork unitOfWork, IPasswordHasher passw
     private static ProfileResponse Map(User user) => new(
         user.Id,
         user.FullName ?? user.Username,
-        user.Email ?? string.Empty,
+        user.Email,
         user.Phone,
-        user.UserRoles.FirstOrDefault()?.Role.Name ?? "Patient",
-        user.IsActive);
+        user.UserRoles
+            .Select(userRole => userRole.Role.Name)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(role => role)
+            .ToArray() is { Length: > 0 } roles ? roles : ["Patient"],
+        user.IsActive,
+        user.Doctor?.Id,
+        user.Patient?.Id);
 }

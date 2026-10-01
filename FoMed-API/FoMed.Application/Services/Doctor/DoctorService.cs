@@ -75,23 +75,6 @@ public sealed class DoctorService(IUnitOfWork unitOfWork)
         };
     }
 
-    // Lấy danh sách bác sĩ active để bệnh nhân chọn khi đặt lịch.
-    public async Task<HTTPResponseData<IReadOnlyList<DoctorResponse>>> GetDoctorsAsync(
-        int? specialtyId,
-        string? search,
-        CancellationToken cancellationToken)
-    {
-        var doctors = await unitOfWork.DoctorRepository
-            .GetActiveAsync(specialtyId, search, cancellationToken);
-
-        return new HTTPResponseData<IReadOnlyList<DoctorResponse>>
-        {
-            DataResponse = doctors.Select(Map).ToList(),
-            Message = DoctorResponseMessageDTO.GetDoctorsSuccess,
-            StatusCode = 200
-        };
-    }
-
     public async Task<HTTPResponseData<IReadOnlyList<PublicDoctorResponse>>> GetPublicDoctorsAsync(
         int? specialtyId,
         string? search,
@@ -110,6 +93,23 @@ public sealed class DoctorService(IUnitOfWork unitOfWork)
                 doctor.Title,
                 doctor.ConsultationFee)).ToList(),
             Message = DoctorResponseMessageDTO.GetDoctorsSuccess,
+            StatusCode = 200
+        };
+    }
+
+    public async Task<HTTPResponseData<IReadOnlyList<PublicSpecialtyResponse>>> GetPublicSpecialtiesAsync(
+        CancellationToken cancellationToken)
+    {
+        var specialties = await unitOfWork.SpecialtyRepository.GetActiveAsync(cancellationToken);
+        return new HTTPResponseData<IReadOnlyList<PublicSpecialtyResponse>>
+        {
+            DataResponse = specialties
+                .Select(specialty => new PublicSpecialtyResponse(
+                    specialty.Id,
+                    specialty.Name,
+                    specialty.Description))
+                .ToList(),
+            Message = DoctorResponseMessageDTO.GetSpecialtiesSuccess,
             StatusCode = 200
         };
     }

@@ -13,6 +13,10 @@ public partial class MedicalRecordService
 
     public byte Status { get; set; }
 
+    public int Quantity { get; set; }
+
+    public decimal UnitPriceSnapshot { get; set; }
+
     public int OrderedBy { get; set; }
 
     public DateTime OrderedAt { get; set; }

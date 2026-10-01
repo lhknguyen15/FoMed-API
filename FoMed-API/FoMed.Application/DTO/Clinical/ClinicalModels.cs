@@ -7,10 +7,24 @@ public sealed record SaveMedicalRecordRequest
     [MaxLength(2000)] public string? Symptoms { get; init; }
     [MaxLength(2000)] public string? Diagnosis { get; init; }
     [MaxLength(2000)] public string? Note { get; init; }
+    public VitalSignsRequest? VitalSigns { get; init; }
+    [MaxLength(20)] public string? Icd10Code { get; init; }
+    [MaxLength(4000)] public string? TreatmentPlan { get; init; }
+    public DateOnly? FollowUpDate { get; init; }
+}
+public sealed record VitalSignsRequest
+{
+    [Range(20, 300)] public decimal? Systolic { get; init; }
+    [Range(10, 200)] public decimal? Diastolic { get; init; }
+    [Range(20, 250)] public decimal? HeartRate { get; init; }
+    [Range(25, 45)] public decimal? Temperature { get; init; }
+    [Range(0.1, 500)] public decimal? WeightKg { get; init; }
+    [Range(0.1, 300)] public decimal? HeightCm { get; init; }
 }
 public sealed record CreatePrescriptionRequest
 {
     [MaxLength(500)] public string? Note { get; init; }
+    public bool AllergyAcknowledged { get; init; }
     [Required, MinLength(1), MaxLength(100)] public List<PrescriptionLineRequest> Items { get; init; } = [];
 }
 public sealed record PrescriptionLineRequest
@@ -23,16 +37,20 @@ public sealed record PrescriptionLineRequest
 public sealed record OrderServiceRequest
 {
     [Range(1, int.MaxValue)] public int ServiceId { get; init; }
+    [Range(1, 1000)] public int Quantity { get; init; } = 1;
 }
 public sealed record SaveLabResultRequest
 {
     [Required, MaxLength(2000)] public string ResultSummary { get; init; } = "";
     [MaxLength(1000)] public string? Conclusion { get; init; }
+    [MaxLength(1000)] public string? ReferenceRange { get; init; }
 }
 public sealed record MedicalRecordResponse(int Id, int AppointmentId, int PatientId, int DoctorId,
-    string? Symptoms, string? Diagnosis, string? Note, DateTime CreatedAt, DateTime? UpdatedAt);
-public sealed record PrescriptionLineResponse(int MedicineId, string MedicineName, int Quantity, string? Dosage, string? Instruction);
+    string? Symptoms, string? Diagnosis, string? Note, VitalSignsRequest? VitalSigns, string? Icd10Code,
+    string? TreatmentPlan, DateOnly? FollowUpDate, bool IsFinalized, DateTime? FinalizedAt,
+    DateTime CreatedAt, DateTime? UpdatedAt);
+public sealed record PrescriptionLineResponse(int MedicineId, string MedicineName, int Quantity, decimal UnitPriceSnapshot, string? Dosage, string? Instruction);
 public sealed record PrescriptionResponse(int Id, int MedicalRecordId, string? Note, IReadOnlyList<PrescriptionLineResponse> Items);
 public sealed record ServiceOrderResponse(int Id, int MedicalRecordId, int ServiceId, string ServiceName, byte Status,
-    string? ResultSummary, string? Conclusion, DateTime? ResultAt);
+    int Quantity, decimal UnitPriceSnapshot, string? ResultSummary, string? Conclusion, string? ReferenceRange, DateTime? ResultAt);
 public sealed record CatalogResponse(int Id, string Name, decimal Price);

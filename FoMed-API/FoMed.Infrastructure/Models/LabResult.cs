@@ -13,6 +13,8 @@ public partial class LabResult
 
     public string? Conclusion { get; set; }
 
+    public string? ReferenceRange { get; set; }
+
     public int TechnicianId { get; set; }
 
     public DateTime ResultAt { get; set; }

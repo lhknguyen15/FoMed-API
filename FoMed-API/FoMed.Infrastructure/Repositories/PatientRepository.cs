@@ -7,6 +7,7 @@ namespace FoMed.Infrastructure.Repositories;
 public interface IPatientRepository : IRepositoryBase<Patient>
 {
     Task<string> GeneratePatientCodeAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<Patient>> FindByPhoneAsync(string phone, CancellationToken cancellationToken = default);
     // Lấy hồ sơ bệnh nhân gắn với tài khoản đang đăng nhập.
     Task<Patient?> GetByUserIdAsync(int userId, CancellationToken cancellationToken = default);
 }
@@ -31,4 +32,11 @@ public sealed class PatientRepository(FoMedDbContext dbContext)
         CancellationToken cancellationToken = default) =>
         dbContext.Patients
             .SingleOrDefaultAsync(patient => patient.UserId == userId, cancellationToken);
+
+    public async Task<IReadOnlyList<Patient>> FindByPhoneAsync(
+        string phone, CancellationToken cancellationToken = default) =>
+        await dbContext.Patients
+            .Where(patient => patient.Phone == phone)
+            .OrderBy(patient => patient.Id)
+            .ToListAsync(cancellationToken);
 }

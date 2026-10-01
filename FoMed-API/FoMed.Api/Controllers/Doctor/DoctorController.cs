@@ -13,23 +13,6 @@ namespace FoMed.Api.Controllers;
 [Authorize]
 public sealed class DoctorController(DoctorService doctorService) : ControllerBase
 {
-    // Lấy danh sách bác sĩ active cho người dùng đã đăng nhập tra cứu.
-    [HttpGet]
-    [ProducesResponseType(typeof(HTTPResponseData<IReadOnlyList<DoctorResponse>>), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<ActionResult<HTTPResponseData<IReadOnlyList<DoctorResponse>>>> GetDoctors(
-        [FromQuery] int? specialtyId,
-        [FromQuery] string? search,
-        CancellationToken cancellationToken)
-    {
-        var response = await doctorService.GetDoctorsAsync(
-            specialtyId,
-            search,
-            cancellationToken);
-
-        return StatusCode(response.StatusCode, response);
-    }
-
     // Lấy hồ sơ bác sĩ của tài khoản đang đăng nhập.
     [HttpGet("me")]
     [Authorize(Roles = "Doctor")]

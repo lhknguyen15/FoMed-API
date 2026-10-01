@@ -7,4 +7,5 @@ public static class DoctorResponseMessageDTO
     public const string GetDoctorSuccess = "Lấy hồ sơ bác sĩ thành công.";
     public const string UpdateDoctorSuccess = "Cập nhật hồ sơ bác sĩ thành công.";
     public const string GetDoctorsSuccess = "Lấy danh sách bác sĩ thành công.";
+    public const string GetSpecialtiesSuccess = "Lấy danh sách chuyên khoa thành công.";
 }

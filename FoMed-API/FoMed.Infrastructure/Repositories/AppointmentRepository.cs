@@ -9,7 +9,10 @@ public interface IAppointmentRepository : IRepositoryBase<Appointment>
 {
     Task<string> GenerateCodeAsync(CancellationToken cancellationToken = default);
     Task<Appointment?> GetByIdWithDetailsAsync(int id, CancellationToken cancellationToken = default);
+    Task<MedicalRecord?> GetMedicalRecordForCompletionAsync(int appointmentId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<Appointment>> GetDoctorAppointmentsAsync(int doctorId, DateOnly? date = null, AppointmentStatus? status = null, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<Appointment>> GetStaffAppointmentsAsync(DateOnly? date = null, AppointmentStatus? status = null, int? doctorId = null, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<Appointment>> GetDoctorQueueAsync(int doctorId, DateOnly date, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<Appointment>> GetPatientAppointmentsAsync(int patientId, DateOnly? date = null, AppointmentStatus? status = null, CancellationToken cancellationToken = default);
     Task<bool> HasDoctorConflictAsync(int doctorId, DateTime startTime, DateTime endTime, int? excludeAppointmentId = null, CancellationToken cancellationToken = default);
     Task<bool> HasPatientConflictAsync(int patientId, DateTime startTime, DateTime endTime, int? excludeAppointmentId = null, CancellationToken cancellationToken = default);
@@ -39,6 +42,11 @@ public sealed class AppointmentRepository(FoMedDbContext dbContext)
             .Include(a => a.AppointmentStatusHistories)
             .SingleOrDefaultAsync(a => a.Id == id, cancellationToken);
 
+    public Task<MedicalRecord?> GetMedicalRecordForCompletionAsync(int appointmentId, CancellationToken cancellationToken = default) =>
+        dbContext.MedicalRecords
+            .Include(record => record.MedicalRecordServices)
+            .SingleOrDefaultAsync(record => record.AppointmentId == appointmentId, cancellationToken);
+
     public async Task<IReadOnlyList<Appointment>> GetDoctorAppointmentsAsync(
         int doctorId, DateOnly? date = null, AppointmentStatus? status = null, CancellationToken cancellationToken = default)
     {
@@ -61,6 +69,49 @@ public sealed class AppointmentRepository(FoMedDbContext dbContext)
             query = query.Where(a => a.Status == sb);
         }
         return await query.OrderBy(a => a.StartTime).ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<Appointment>> GetStaffAppointmentsAsync(
+        DateOnly? date = null, AppointmentStatus? status = null, int? doctorId = null, CancellationToken cancellationToken = default)
+    {
+        var query = dbContext.Appointments
+            .AsNoTracking()
+            .Include(a => a.Patient)
+            .Include(a => a.Doctor).ThenInclude(d => d.Specialty)
+            .Include(a => a.Service)
+            .AsQueryable();
+
+        if (date.HasValue)
+        {
+            var start = date.Value.ToDateTime(TimeOnly.MinValue);
+            var end = date.Value.ToDateTime(TimeOnly.MaxValue);
+            query = query.Where(a => a.StartTime >= start && a.StartTime <= end);
+        }
+        if (status.HasValue)
+        {
+            var sb = (byte)status.Value;
+            query = query.Where(a => a.Status == sb);
+        }
+        if (doctorId.HasValue)
+            query = query.Where(a => a.DoctorId == doctorId.Value);
+
+        return await query.OrderBy(a => a.StartTime).ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<Appointment>> GetDoctorQueueAsync(
+        int doctorId, DateOnly date, CancellationToken cancellationToken = default)
+    {
+        var start = date.ToDateTime(TimeOnly.MinValue);
+        var end = date.ToDateTime(TimeOnly.MaxValue);
+        return await dbContext.Appointments
+            .AsNoTracking()
+            .Include(a => a.Patient).ThenInclude(p => p.MedicalRecords)
+            .Include(a => a.Doctor).ThenInclude(d => d.Specialty)
+            .Include(a => a.Service)
+            .Where(a => a.DoctorId == doctorId && a.Status == (byte)AppointmentStatus.Confirmed
+                && a.CheckedInAt.HasValue && a.StartTime >= start && a.StartTime <= end)
+            .OrderBy(a => a.QueueNumber).ThenBy(a => a.CheckedInAt)
+            .ToListAsync(cancellationToken);
     }
 
     public async Task<IReadOnlyList<Appointment>> GetPatientAppointmentsAsync(
@@ -124,7 +175,8 @@ public sealed class AppointmentRepository(FoMedDbContext dbContext)
         var start = date.ToDateTime(TimeOnly.MinValue);
         var end = date.ToDateTime(TimeOnly.MaxValue);
         var max = await dbContext.Appointments
-            .Where(a => a.DoctorId == doctorId && a.StartTime >= start && a.StartTime <= end && a.QueueNumber.HasValue)
+            .Where(a => a.DoctorId == doctorId && a.StartTime >= start && a.StartTime <= end &&
+                a.CheckedInAt.HasValue && a.QueueNumber.HasValue)
             .MaxAsync(a => (int?)a.QueueNumber, cancellationToken);
         return (max ?? 0) + 1;
     }

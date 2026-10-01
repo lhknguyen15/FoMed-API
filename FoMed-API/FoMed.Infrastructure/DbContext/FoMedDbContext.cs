@@ -30,6 +30,10 @@ public partial class FoMedDbContext : Microsoft.EntityFrameworkCore.DbContext
 
     public virtual DbSet<InvoiceItem> InvoiceItems { get; set; }
 
+    public virtual DbSet<InventoryReceipt> InventoryReceipts { get; set; }
+
+    public virtual DbSet<InventoryReceiptItem> InventoryReceiptItems { get; set; }
+
     public virtual DbSet<LabResult> LabResults { get; set; }
 
     public virtual DbSet<MedicalRecord> MedicalRecords { get; set; }
@@ -47,6 +51,8 @@ public partial class FoMedDbContext : Microsoft.EntityFrameworkCore.DbContext
     public virtual DbSet<Prescription> Prescriptions { get; set; }
 
     public virtual DbSet<PrescriptionItem> PrescriptionItems { get; set; }
+
+    public virtual DbSet<PrescriptionDispense> PrescriptionDispenses { get; set; }
 
     public virtual DbSet<RefreshToken> RefreshTokens { get; set; }
 
@@ -98,6 +104,9 @@ public partial class FoMedDbContext : Microsoft.EntityFrameworkCore.DbContext
                 .HasMaxLength(500)
                 .HasColumnName("reason");
             entity.Property(e => e.ServiceId).HasColumnName("service_id");
+            entity.Property(e => e.FeeSnapshot)
+                .HasColumnType("decimal(12, 2)")
+                .HasColumnName("fee_snapshot");
             entity.Property(e => e.Source).HasColumnName("source");
             entity.Property(e => e.StartTime).HasColumnName("start_time");
             entity.Property(e => e.Status).HasColumnName("status");
@@ -334,6 +343,9 @@ public partial class FoMedDbContext : Microsoft.EntityFrameworkCore.DbContext
             entity.Property(e => e.TotalAmount)
                 .HasColumnType("decimal(12, 2)")
                 .HasColumnName("total_amount");
+            entity.Property(e => e.ConsultationFee)
+                .HasColumnType("decimal(12, 2)")
+                .HasColumnName("consultation_fee");
 
             entity.HasOne(d => d.Appointment).WithMany(p => p.Invoices)
                 .HasForeignKey(d => d.AppointmentId)
@@ -390,6 +402,41 @@ public partial class FoMedDbContext : Microsoft.EntityFrameworkCore.DbContext
                 .HasConstraintName("FK_invoice_items_service");
         });
 
+        modelBuilder.Entity<InventoryReceipt>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_inventory_receipts");
+            entity.ToTable("inventory_receipts", "clinical");
+            entity.HasIndex(e => e.DocumentNo, "UQ_inventory_receipts_document_no").IsUnique();
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.SupplierName).HasMaxLength(255).HasColumnName("supplier_name");
+            entity.Property(e => e.DocumentNo).HasMaxLength(100).IsUnicode(false).HasColumnName("document_no");
+            entity.Property(e => e.ReceivedBy).HasColumnName("received_by");
+            entity.Property(e => e.ReceivedAt).HasDefaultValueSql("(sysutcdatetime())").HasColumnName("received_at");
+            entity.Property(e => e.Note).HasMaxLength(500).HasColumnName("note");
+            entity.HasOne(e => e.ReceivedByNavigation).WithMany()
+                .HasForeignKey(e => e.ReceivedBy).OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_inventory_receipts_user");
+        });
+
+        modelBuilder.Entity<InventoryReceiptItem>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_inventory_receipt_items");
+            entity.ToTable("inventory_receipt_items", "clinical");
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.ReceiptId).HasColumnName("receipt_id");
+            entity.Property(e => e.MedicineId).HasColumnName("medicine_id");
+            entity.Property(e => e.BatchId).HasColumnName("batch_id");
+            entity.Property(e => e.Quantity).HasColumnName("quantity");
+            entity.Property(e => e.UnitCost).HasColumnType("decimal(12, 2)").HasColumnName("unit_cost");
+            entity.Property(e => e.LineAmount).HasColumnType("decimal(14, 2)").HasColumnName("line_amount");
+            entity.HasOne(e => e.Receipt).WithMany(e => e.Items).HasForeignKey(e => e.ReceiptId)
+                .OnDelete(DeleteBehavior.ClientSetNull).HasConstraintName("FK_inventory_receipt_items_receipt");
+            entity.HasOne(e => e.Medicine).WithMany(e => e.InventoryReceiptItems).HasForeignKey(e => e.MedicineId)
+                .OnDelete(DeleteBehavior.ClientSetNull).HasConstraintName("FK_inventory_receipt_items_medicine");
+            entity.HasOne(e => e.Batch).WithMany(e => e.InventoryReceiptItems).HasForeignKey(e => e.BatchId)
+                .OnDelete(DeleteBehavior.ClientSetNull).HasConstraintName("FK_inventory_receipt_items_batch");
+        });
+
         modelBuilder.Entity<LabResult>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("PK__lab_resu__3213E83F71BDD45B");
@@ -409,6 +456,9 @@ public partial class FoMedDbContext : Microsoft.EntityFrameworkCore.DbContext
             entity.Property(e => e.ResultSummary)
                 .HasMaxLength(2000)
                 .HasColumnName("result_summary");
+            entity.Property(e => e.ReferenceRange)
+                .HasMaxLength(1000)
+                .HasColumnName("reference_range");
             entity.Property(e => e.TechnicianId).HasColumnName("technician_id");
 
             entity.HasOne(d => d.MedicalRecordService).WithOne(p => p.LabResult)
@@ -442,6 +492,21 @@ public partial class FoMedDbContext : Microsoft.EntityFrameworkCore.DbContext
             entity.Property(e => e.Note)
                 .HasMaxLength(4000)
                 .HasColumnName("note");
+            entity.Property(e => e.VitalsJson)
+                .HasMaxLength(4000)
+                .HasColumnName("vitals_json");
+            entity.Property(e => e.Icd10Code)
+                .HasMaxLength(20)
+                .IsUnicode(false)
+                .HasColumnName("icd10_code");
+            entity.Property(e => e.TreatmentPlan)
+                .HasMaxLength(4000)
+                .HasColumnName("treatment_plan");
+            entity.Property(e => e.FollowUpDate).HasColumnName("follow_up_date");
+            entity.Property(e => e.IsFinalized)
+                .HasDefaultValue(false)
+                .HasColumnName("is_finalized");
+            entity.Property(e => e.FinalizedAt).HasColumnName("finalized_at");
             entity.Property(e => e.PatientId).HasColumnName("patient_id");
             entity.Property(e => e.Symptoms)
                 .HasMaxLength(4000)
@@ -478,6 +543,10 @@ public partial class FoMedDbContext : Microsoft.EntityFrameworkCore.DbContext
             entity.Property(e => e.OrderedBy).HasColumnName("ordered_by");
             entity.Property(e => e.ServiceId).HasColumnName("service_id");
             entity.Property(e => e.Status).HasColumnName("status");
+            entity.Property(e => e.Quantity).HasDefaultValue(1).HasColumnName("quantity");
+            entity.Property(e => e.UnitPriceSnapshot)
+                .HasColumnType("decimal(12, 2)")
+                .HasColumnName("unit_price_snapshot");
 
             entity.HasOne(d => d.MedicalRecord).WithMany(p => p.MedicalRecordServices)
                 .HasForeignKey(d => d.MedicalRecordId)
@@ -567,6 +636,24 @@ public partial class FoMedDbContext : Microsoft.EntityFrameworkCore.DbContext
             entity.Property(e => e.Address)
                 .HasMaxLength(500)
                 .HasColumnName("address");
+            entity.Property(e => e.NationalId)
+                .HasMaxLength(20)
+                .IsUnicode(false)
+                .HasColumnName("national_id");
+            entity.Property(e => e.InsuranceNumber)
+                .HasMaxLength(50)
+                .IsUnicode(false)
+                .HasColumnName("insurance_number");
+            entity.Property(e => e.EmergencyContactName)
+                .HasMaxLength(255)
+                .HasColumnName("emergency_contact_name");
+            entity.Property(e => e.EmergencyContactPhone)
+                .HasMaxLength(20)
+                .IsUnicode(false)
+                .HasColumnName("emergency_contact_phone");
+            entity.Property(e => e.Allergies)
+                .HasMaxLength(1000)
+                .HasColumnName("allergies");
             entity.Property(e => e.CreatedAt)
                 .HasDefaultValueSql("(sysutcdatetime())")
                 .HasColumnName("created_at");
@@ -660,6 +747,9 @@ public partial class FoMedDbContext : Microsoft.EntityFrameworkCore.DbContext
             entity.Property(e => e.Quantity)
                 .HasDefaultValue(1)
                 .HasColumnName("quantity");
+            entity.Property(e => e.UnitPriceSnapshot)
+                .HasColumnType("decimal(12, 2)")
+                .HasColumnName("unit_price_snapshot");
 
             entity.HasOne(d => d.Batch).WithMany(p => p.PrescriptionItems)
                 .HasForeignKey(d => d.BatchId)
@@ -674,6 +764,29 @@ public partial class FoMedDbContext : Microsoft.EntityFrameworkCore.DbContext
                 .HasForeignKey(d => d.PrescriptionId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_prescription_items_presc");
+        });
+
+        modelBuilder.Entity<PrescriptionDispense>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_prescription_dispenses");
+            entity.ToTable("prescription_dispenses", "clinical");
+            entity.HasIndex(e => e.PrescriptionItemId, "IX_prescription_dispenses_item");
+            entity.HasIndex(e => e.BatchId, "IX_prescription_dispenses_batch");
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.PrescriptionItemId).HasColumnName("prescription_item_id");
+            entity.Property(e => e.BatchId).HasColumnName("batch_id");
+            entity.Property(e => e.Quantity).HasColumnName("quantity");
+            entity.Property(e => e.DispensedBy).HasColumnName("dispensed_by");
+            entity.Property(e => e.DispensedAt).HasDefaultValueSql("(sysutcdatetime())").HasColumnName("dispensed_at");
+            entity.HasOne(e => e.PrescriptionItem).WithMany(e => e.PrescriptionDispenses)
+                .HasForeignKey(e => e.PrescriptionItemId).OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_prescription_dispenses_item");
+            entity.HasOne(e => e.Batch).WithMany(e => e.PrescriptionDispenses)
+                .HasForeignKey(e => e.BatchId).OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_prescription_dispenses_batch");
+            entity.HasOne(e => e.DispensedByNavigation).WithMany()
+                .HasForeignKey(e => e.DispensedBy).OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_prescription_dispenses_user");
         });
 
         modelBuilder.Entity<RefreshToken>(entity =>
@@ -728,6 +841,10 @@ public partial class FoMedDbContext : Microsoft.EntityFrameworkCore.DbContext
             entity.Property(e => e.Description)
                 .HasMaxLength(500)
                 .HasColumnName("description");
+            entity.Property(e => e.Code)
+                .HasMaxLength(50)
+                .IsUnicode(false)
+                .HasColumnName("code");
             entity.Property(e => e.IsActive)
                 .HasDefaultValue(true)
                 .HasColumnName("is_active");
@@ -737,6 +854,10 @@ public partial class FoMedDbContext : Microsoft.EntityFrameworkCore.DbContext
             entity.Property(e => e.Price)
                 .HasColumnType("decimal(12, 2)")
                 .HasColumnName("price");
+            entity.Property(e => e.SpecialtyId).HasColumnName("specialty_id");
+            entity.Property(e => e.DurationMinutes).HasDefaultValue(30).HasColumnName("duration_minutes");
+            entity.HasIndex(e => e.Code, "UX_services_code").IsUnique().HasFilter("([code] IS NOT NULL)");
+            entity.HasOne(e => e.Specialty).WithMany().HasForeignKey(e => e.SpecialtyId).OnDelete(DeleteBehavior.ClientSetNull).HasConstraintName("FK_services_specialty");
         });
 
         modelBuilder.Entity<Specialty>(entity =>

@@ -22,4 +22,6 @@ public partial class Medicine
     public virtual ICollection<MedicineBatch> MedicineBatches { get; set; } = new List<MedicineBatch>();
 
     public virtual ICollection<PrescriptionItem> PrescriptionItems { get; set; } = new List<PrescriptionItem>();
+
+    public virtual ICollection<InventoryReceiptItem> InventoryReceiptItems { get; set; } = new List<InventoryReceiptItem>();
 }

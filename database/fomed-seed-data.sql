@@ -44,12 +44,13 @@ DECLARE @PwHash VARCHAR(255) = '$2b$12$bUZZ.gtZ7P4tDrd/gTbRneMXBGxrW5vMLeVpLwQW0
    1. ROLES (co the da co tu buoc tao DB, chi insert neu thieu)
    ============================================================ */
 IF NOT EXISTS (SELECT 1 FROM auth.roles)
-    INSERT INTO auth.roles (name) VALUES ('Admin'), ('Receptionist'), ('Doctor'), ('Technician'), ('Patient');
+    INSERT INTO auth.roles (name) VALUES ('Admin'), ('Receptionist'), ('Doctor'), ('Technician'), ('Pharmacist'), ('Patient');
 
 DECLARE @RoleAdmin INT = (SELECT id FROM auth.roles WHERE name = 'Admin');
 DECLARE @RoleReceptionist INT = (SELECT id FROM auth.roles WHERE name = 'Receptionist');
 DECLARE @RoleDoctor INT = (SELECT id FROM auth.roles WHERE name = 'Doctor');
 DECLARE @RoleTechnician INT = (SELECT id FROM auth.roles WHERE name = 'Technician');
+DECLARE @RolePharmacist INT = (SELECT id FROM auth.roles WHERE name = 'Pharmacist');
 DECLARE @RolePatient INT = (SELECT id FROM auth.roles WHERE name = 'Patient');
 
 /* ============================================================
@@ -88,6 +89,12 @@ INSERT INTO auth.users (username, password_hash, email, full_name, phone)
 VALUES ('ktv.linh', @PwHash, 'ktv.linh@fomed.vn', N'Đỗ Thị Linh', '0900000021');
 DECLARE @UserTechnician1 INT = SCOPE_IDENTITY();
 INSERT INTO auth.user_roles (user_id, role_id) VALUES (@UserTechnician1, @RoleTechnician);
+
+-- Duoc si
+INSERT INTO auth.users (username, password_hash, email, full_name, phone)
+VALUES ('duoc01', @PwHash, 'duoc01@fomed.vn', N'Dược sĩ FoMed', '0900000031');
+DECLARE @UserPharmacist INT = SCOPE_IDENTITY();
+INSERT INTO auth.user_roles (user_id, role_id) VALUES (@UserPharmacist, @RolePharmacist);
 
 -- Benh nhan co tai khoan (3 nguoi)
 INSERT INTO auth.users (username, password_hash, email, full_name, phone)

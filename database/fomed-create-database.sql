@@ -142,6 +142,11 @@ CREATE TABLE scheduling.patients (
     date_of_birth  DATE NULL,
     phone          VARCHAR(20) NULL,
     address        NVARCHAR(500) NULL,
+    national_id    VARCHAR(20) NULL,
+    insurance_number VARCHAR(50) NULL,
+    emergency_contact_name NVARCHAR(255) NULL,
+    emergency_contact_phone VARCHAR(20) NULL,
+    allergies      NVARCHAR(1000) NULL,
     is_active      BIT NOT NULL DEFAULT 1,
     created_at     DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
     CONSTRAINT FK_patients_user FOREIGN KEY (user_id) REFERENCES auth.users(id),
@@ -184,6 +189,7 @@ CREATE TABLE scheduling.appointments (
     patient_id         INT NOT NULL,
     doctor_id          INT NOT NULL,
     service_id         INT NULL,
+    fee_snapshot       DECIMAL(12,2) NULL,
     start_time         DATETIME2 NOT NULL,
     end_time           DATETIME2 NOT NULL,
     status             TINYINT NOT NULL DEFAULT 0,
@@ -236,6 +242,12 @@ CREATE TABLE clinical.medical_records (
     symptoms        NVARCHAR(4000) NULL,
     diagnosis       NVARCHAR(4000) NULL,
     note            NVARCHAR(4000) NULL,
+    vitals_json     NVARCHAR(4000) NULL,
+    icd10_code      VARCHAR(20) NULL,
+    treatment_plan   NVARCHAR(4000) NULL,
+    follow_up_date  DATE NULL,
+    is_finalized    BIT NOT NULL DEFAULT 0,
+    finalized_at    DATETIME2 NULL,
     created_at      DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
     updated_at      DATETIME2 NULL,
     CONSTRAINT FK_medical_records_appt FOREIGN KEY (appointment_id) REFERENCES scheduling.appointments(id),
@@ -285,6 +297,34 @@ CREATE TABLE clinical.stock_transactions (
 );
 GO
 
+CREATE TABLE clinical.inventory_receipts (
+    id            INT IDENTITY(1,1) PRIMARY KEY,
+    supplier_name NVARCHAR(255) NOT NULL,
+    document_no   VARCHAR(100) NOT NULL,
+    received_by   INT NOT NULL,
+    received_at   DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+    note          NVARCHAR(500) NULL,
+    CONSTRAINT UQ_inventory_receipts_document_no UNIQUE (document_no),
+    CONSTRAINT FK_inventory_receipts_user FOREIGN KEY (received_by) REFERENCES auth.users(id)
+);
+GO
+
+CREATE TABLE clinical.inventory_receipt_items (
+    id          INT IDENTITY(1,1) PRIMARY KEY,
+    receipt_id  INT NOT NULL,
+    medicine_id INT NOT NULL,
+    batch_id    INT NOT NULL,
+    quantity    INT NOT NULL,
+    unit_cost   DECIMAL(12,2) NOT NULL DEFAULT 0,
+    line_amount DECIMAL(14,2) NOT NULL DEFAULT 0,
+    CONSTRAINT FK_inventory_receipt_items_receipt FOREIGN KEY (receipt_id) REFERENCES clinical.inventory_receipts(id),
+    CONSTRAINT FK_inventory_receipt_items_medicine FOREIGN KEY (medicine_id) REFERENCES clinical.medicines(id),
+    CONSTRAINT FK_inventory_receipt_items_batch FOREIGN KEY (batch_id) REFERENCES clinical.medicine_batches(id),
+    CONSTRAINT CK_inventory_receipt_items_qty CHECK (quantity > 0),
+    CONSTRAINT CK_inventory_receipt_items_cost CHECK (unit_cost >= 0)
+);
+GO
+
 CREATE TABLE clinical.prescriptions (
     id                  INT IDENTITY(1,1) PRIMARY KEY,
     medical_record_id   INT NOT NULL,
@@ -301,6 +341,7 @@ CREATE TABLE clinical.prescription_items (
     medicine_id       INT NOT NULL,
     batch_id          INT NULL,
     quantity          INT NOT NULL DEFAULT 1,
+    unit_price_snapshot DECIMAL(12,2) NOT NULL DEFAULT 0,
     dosage            NVARCHAR(255) NULL,
     instruction       NVARCHAR(255) NULL,
     CONSTRAINT FK_prescription_items_presc FOREIGN KEY (prescription_id) REFERENCES clinical.prescriptions(id),
@@ -310,17 +351,39 @@ CREATE TABLE clinical.prescription_items (
 );
 GO
 
+CREATE TABLE clinical.prescription_dispenses (
+    id                  BIGINT IDENTITY(1,1) PRIMARY KEY,
+    prescription_item_id INT NOT NULL,
+    batch_id             INT NOT NULL,
+    quantity             INT NOT NULL,
+    dispensed_by         INT NOT NULL,
+    dispensed_at         DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT FK_prescription_dispenses_item FOREIGN KEY (prescription_item_id) REFERENCES clinical.prescription_items(id),
+    CONSTRAINT FK_prescription_dispenses_batch FOREIGN KEY (batch_id) REFERENCES clinical.medicine_batches(id),
+    CONSTRAINT FK_prescription_dispenses_user FOREIGN KEY (dispensed_by) REFERENCES auth.users(id),
+    CONSTRAINT CK_prescription_dispenses_qty CHECK (quantity > 0)
+);
+CREATE INDEX IX_prescription_dispenses_item ON clinical.prescription_dispenses(prescription_item_id);
+CREATE INDEX IX_prescription_dispenses_batch ON clinical.prescription_dispenses(batch_id);
+GO
+
 /* ============================================================
    7. BILLING SCHEMA - services phai tao truoc de clinical.medical_record_services tham chieu
    ============================================================ */
 CREATE TABLE billing.services (
     id           INT IDENTITY(1,1) PRIMARY KEY,
     name         NVARCHAR(255) NOT NULL,
+    code         VARCHAR(50) NULL,
     description  NVARCHAR(500) NULL,
     price        DECIMAL(12,2) NOT NULL DEFAULT 0,
+    specialty_id INT NULL,
+    duration_minutes INT NOT NULL DEFAULT 30,
     is_active    BIT NOT NULL DEFAULT 1,
-    CONSTRAINT CK_services_price CHECK (price >= 0)
+    CONSTRAINT CK_services_price CHECK (price >= 0),
+    CONSTRAINT CK_services_duration CHECK (duration_minutes BETWEEN 5 AND 1440),
+    CONSTRAINT FK_services_specialty FOREIGN KEY (specialty_id) REFERENCES scheduling.specialties(id)
 );
+CREATE UNIQUE INDEX UX_services_code ON billing.services(code) WHERE code IS NOT NULL;
 ALTER TABLE scheduling.appointments
     ADD CONSTRAINT FK_appointments_service FOREIGN KEY (service_id)
     REFERENCES billing.services(id);
@@ -333,8 +396,9 @@ CREATE TABLE billing.invoices (
     patient_id          INT NOT NULL,
     appointment_id      INT NULL,
     medical_record_id   INT NULL,
-    patient_name        NVARCHAR(255) NULL,
-    total_amount        DECIMAL(12,2) NOT NULL DEFAULT 0,
+      patient_name        NVARCHAR(255) NULL,
+      consultation_fee    DECIMAL(12,2) NOT NULL DEFAULT 0,
+      total_amount        DECIMAL(12,2) NOT NULL DEFAULT 0,
     status              TINYINT NOT NULL DEFAULT 0,
     created_by          INT NULL,
     created_at          DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
@@ -391,6 +455,8 @@ CREATE TABLE clinical.medical_record_services (
     medical_record_id   INT NOT NULL,
     service_id          INT NOT NULL,
     status              TINYINT NOT NULL DEFAULT 0,
+    quantity            INT NOT NULL DEFAULT 1,
+    unit_price_snapshot DECIMAL(12,2) NOT NULL DEFAULT 0,
     ordered_by          INT NOT NULL,
     ordered_at          DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
     CONSTRAINT FK_mrs_record FOREIGN KEY (medical_record_id) REFERENCES clinical.medical_records(id),
@@ -405,6 +471,7 @@ CREATE TABLE clinical.lab_results (
     medical_record_service_id  INT NOT NULL,
     result_summary              NVARCHAR(2000) NULL,
     conclusion                  NVARCHAR(1000) NULL,
+    reference_range             NVARCHAR(1000) NULL,
     technician_id                INT NOT NULL,
     result_at                    DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
     CONSTRAINT FK_lab_results_mrs FOREIGN KEY (medical_record_service_id) REFERENCES clinical.medical_record_services(id),
@@ -429,7 +496,7 @@ GO
 IF NOT EXISTS (SELECT 1 FROM auth.roles)
 BEGIN
     INSERT INTO auth.roles (name) VALUES
-    ('Admin'), ('Receptionist'), ('Doctor'), ('Technician'), ('Patient');
+    ('Admin'), ('Receptionist'), ('Doctor'), ('Technician'), ('Pharmacist'), ('Patient');
 END
 GO
 

@@ -62,6 +62,7 @@ builder.Services.AddScoped<FoMed.Application.Services.Patient.PatientService>();
 builder.Services.AddScoped<FoMed.Application.Services.Patient.PatientStaffService>();
 builder.Services.AddScoped<FoMed.Application.Services.Doctor.DoctorService>();
 builder.Services.AddScoped<FoMed.Application.Services.Doctor.DoctorScheduleService>();
+builder.Services.AddScoped<FoMed.Application.Services.Doctor.AdminDoctorScheduleService>();
 
 // Cấu hình xác thực JWT cho API.
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)

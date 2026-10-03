@@ -18,7 +18,8 @@ public sealed class BillingService(ClinicRepository repository, ClinicAccess acc
             .Include(r => r.Prescription!).ThenInclude(p => p.PrescriptionItems).ThenInclude(i => i.Medicine)
             .AsSplitQuery().SingleOrDefaultAsync(r => r.Id == request.MedicalRecordId, ct)
             ?? throw new ClinicException(404, "Không tìm thấy bệnh án.");
-        if (record.Appointment.Status != (byte)AppointmentStatus.Completed) throw new ClinicException(409, "Chỉ lập hóa đơn khi ca khám đã hoàn thành.");
+        if (record.Appointment.Status != (byte)AppointmentStatus.Completed || !record.IsFinalized)
+            throw new ClinicException(409, "Chỉ lập hóa đơn khi ca khám đã hoàn thành và bệnh án đã chốt.");
         if (record.MedicalRecordServices.Any(o => o.Status == 0)) throw new ClinicException(409, "Còn dịch vụ chưa có kết quả.");
         if (await repository.Query<Invoice>().AnyAsync(i => i.MedicalRecordId == record.Id && i.Status != 2, ct))
             throw new ClinicException(409, "Bệnh án đã có hóa đơn.");
@@ -82,6 +83,7 @@ public sealed class BillingService(ClinicRepository repository, ClinicAccess acc
             .Include(r => r.Invoices)
             .AsSplitQuery().AsNoTracking()
             .Where(r => r.Appointment.Status == (byte)AppointmentStatus.Completed
+                && r.IsFinalized
                 && !r.MedicalRecordServices.Any(o => o.Status == 0)
                 && !r.Invoices.Any(i => i.Status != 2))
             .OrderByDescending(r => r.Id)

@@ -11,6 +11,10 @@ Chay dung thu tu sau trong SQL Server Management Studio, Azure Data Studio hoac 
 
 Voi database da tao tu truoc, chay cac script trong `migrations` theo thu tu ten file. Migration `20261001_add_prescription_snapshot_and_pharmacy.sql` them gia snapshot, bang phat thuoc va role Pharmacist; migration `20261002_add_receipts_and_admin_schedule.sql` them phieu nhap nhieu dong. Các bảng lịch nghỉ đã có trong schema gốc.
 
+Migration `20261003_add_doctor_public_profile.sql` thêm ảnh đại diện, giới thiệu và năm bắt đầu hành nghề cho bác sĩ. Chạy trên database hiện có, không chạy lại seed. Các trường mới cho phép null; dữ liệu được nhập qua form admin hoặc hồ sơ bác sĩ. Chi tiết tại `docs/doctor-public-profile.md`.
+
+Có thể cập nhật hàng loạt bằng `scripts/update-doctor-public-profiles.sql`: đã có dữ liệu DEMO cho 5 bác sĩ theo username, gồm avatar minh họa, giới thiệu từng chuyên khoa và năm hành nghề giả lập. Chạy mặc định `@Apply = 0` để xem trước, rồi đổi sang `1` để lưu trên database phát triển/demo. `NULL` giữ nguyên thông tin hiện có. Script không xóa dữ liệu, không tạo lại tài khoản và không cần chạy lại seed. Không sử dụng dữ liệu mẫu làm hồ sơ bác sĩ thật khi production.
+
 Script seed phu thuoc vao database `FoMedDb`, cac schema, bang, sequence va role duoc tao boi script thu nhat.
 
 ## Yeu cau moi truong

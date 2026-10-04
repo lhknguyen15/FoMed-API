@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace FoMed.Application.DTO.Doctor;
 
-public sealed record CreateDoctorRequest
+public sealed record CreateDoctorRequest : DoctorPublicProfileRequest
 {
     [Required, MaxLength(100)] public string Username { get; init; } = "";
     [Required, MinLength(8), MaxLength(100)] public string Password { get; init; } = "";
@@ -16,7 +16,7 @@ public sealed record CreateDoctorRequest
     [Range(typeof(decimal), "0", "9999999999")] public decimal ConsultationFee { get; init; }
 }
 
-public sealed record UpdateDoctorAdminRequest
+public sealed record UpdateDoctorAdminRequest : DoctorPublicProfileRequest
 {
     [Required, MaxLength(255)] public string FullName { get; init; } = "";
     [Range(1, int.MaxValue)] public int SpecialtyId { get; init; }

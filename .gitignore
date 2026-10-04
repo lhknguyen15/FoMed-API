@@ -12,6 +12,9 @@ frontend/**/node_modules/
 frontend/**/dist/
 frontend/**/.env*
 
+# Frontend is maintained as an independent nested repository
+/FoMed-Frontend/
+
 # IDE
 .vs/
 .vscode/*.log

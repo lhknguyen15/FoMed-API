@@ -6,6 +6,7 @@ namespace FoMed.Infrastructure.Repositories;
 
 public interface IDoctorRepository : IRepositoryBase<Doctor>
 {
+    Task<Doctor?> GetActiveByIdAsync(int id, CancellationToken cancellationToken = default);
     // Lấy hồ sơ bác sĩ gắn với tài khoản đang đăng nhập.
     Task<Doctor?> GetByUserIdAsync(int userId, CancellationToken cancellationToken = default);
 
@@ -20,6 +21,11 @@ public sealed class DoctorRepository(FoMedDbContext dbContext)
     : RepositoryBase<Doctor>(dbContext), IDoctorRepository
 {
     private readonly FoMedDbContext dbContext = dbContext;
+
+    public Task<Doctor?> GetActiveByIdAsync(int id, CancellationToken cancellationToken = default) =>
+        dbContext.Doctors.AsNoTracking().Include(doctor => doctor.Specialty)
+            .SingleOrDefaultAsync(doctor => doctor.Id == id && doctor.IsActive && doctor.Specialty.IsActive,
+                cancellationToken);
 
     public Task<Doctor?> GetByUserIdAsync(
         int userId,

@@ -14,6 +14,17 @@ public sealed class PublicCatalogController(
     DoctorService doctorService,
     ClinicalService clinicalService) : ControllerBase
 {
+    [HttpGet("doctors/{id:int:min(1)}")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(HTTPResponseData<PublicDoctorDetailResponse?>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(HTTPResponseData<PublicDoctorDetailResponse?>), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<HTTPResponseData<PublicDoctorDetailResponse?>>> GetDoctor(
+        int id, CancellationToken cancellationToken)
+    {
+        var response = await doctorService.GetPublicDoctorAsync(id, cancellationToken);
+        return StatusCode(response.StatusCode, response);
+    }
+
     [HttpGet("doctors")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(HTTPResponseData<IReadOnlyList<PublicDoctorResponse>>), StatusCodes.Status200OK)]

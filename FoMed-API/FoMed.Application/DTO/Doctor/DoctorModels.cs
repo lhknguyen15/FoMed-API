@@ -13,7 +13,10 @@ public sealed record DoctorResponse(
     string? Phone,
     string? Room,
     decimal ConsultationFee,
-    bool IsActive);
+    bool IsActive,
+    string? AvatarUrl = null,
+    string? Biography = null,
+    int? PracticeStartYear = null);
 
 public sealed record PublicDoctorResponse(
     int DoctorId,
@@ -21,14 +24,28 @@ public sealed record PublicDoctorResponse(
     string SpecialtyName,
     string FullName,
     string? Title,
-    decimal ConsultationFee);
+    decimal ConsultationFee,
+    string? AvatarUrl = null);
 
 public sealed record PublicSpecialtyResponse(
     int SpecialtyId,
     string Name,
     string? Description);
 
-public sealed record UpdateDoctorProfileRequest
+public sealed record PublicDoctorDetailResponse(
+    int DoctorId,
+    int SpecialtyId,
+    string SpecialtyName,
+    string FullName,
+    string? Title,
+    decimal ConsultationFee,
+    string? Room,
+    string? AvatarUrl,
+    string? Biography,
+    int? PracticeStartYear,
+    string? SpecialtyDescription);
+
+public sealed record UpdateDoctorProfileRequest : DoctorPublicProfileRequest
 {
     [Required]
     [MaxLength(255)]

@@ -42,6 +42,7 @@ public sealed class DoctorAdminService(ClinicRepository repository, ClinicAccess
         {
             User = user, Specialty = specialty, FullName = request.FullName.Trim(), Title = Normalize(request.Title),
             LicenseNumber = Normalize(request.LicenseNumber), Phone = Normalize(request.Phone), Room = Normalize(request.Room),
+            AvatarUrl = Normalize(request.AvatarUrl), Biography = Normalize(request.Biography), PracticeStartYear = request.PracticeStartYear,
             ConsultationFee = request.ConsultationFee, IsActive = true, CreatedAt = DateTime.UtcNow
         };
         repository.Add(user);
@@ -63,6 +64,8 @@ public sealed class DoctorAdminService(ClinicRepository repository, ClinicAccess
         doctor.FullName = request.FullName.Trim(); doctor.SpecialtyId = specialty.Id; doctor.Specialty = specialty;
         doctor.Title = Normalize(request.Title); doctor.LicenseNumber = Normalize(request.LicenseNumber);
         doctor.Phone = Normalize(request.Phone); doctor.Room = Normalize(request.Room);
+        doctor.AvatarUrl = Normalize(request.AvatarUrl); doctor.Biography = Normalize(request.Biography);
+        doctor.PracticeStartYear = request.PracticeStartYear;
         doctor.ConsultationFee = request.ConsultationFee; doctor.IsActive = isActive;
         doctor.User.FullName = doctor.FullName; doctor.User.Phone = doctor.Phone; doctor.User.IsActive = isActive;
         await repository.SaveAsync(ct);
@@ -107,6 +110,6 @@ public sealed class DoctorAdminService(ClinicRepository repository, ClinicAccess
     private Task<bool> HasFutureAppointmentsAsync(int doctorId, CancellationToken ct) => repository.Query<AppointmentEntity>().AnyAsync(a => a.DoctorId == doctorId && a.StartTime > ClinicTime.Now && a.Status < (byte)AppointmentStatus.Completed, ct);
     private async Task RequireAdminAsync(int userId, CancellationToken ct) { if (!await access.HasRoleAsync(userId, "Admin", ct)) throw new ClinicException(403, "Chỉ quản trị viên được quản lý bác sĩ và chuyên khoa."); }
     private static string? Normalize(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-    private static DoctorResponse Map(DoctorEntity d) => new(d.Id, d.UserId, d.SpecialtyId, d.Specialty.Name, d.FullName, d.Title, d.LicenseNumber, d.Phone, d.Room, d.ConsultationFee, d.IsActive);
+    private static DoctorResponse Map(DoctorEntity d) => new(d.Id, d.UserId, d.SpecialtyId, d.Specialty.Name, d.FullName, d.Title, d.LicenseNumber, d.Phone, d.Room, d.ConsultationFee, d.IsActive, d.AvatarUrl, d.Biography, d.PracticeStartYear);
     private static HTTPResponseData<IReadOnlyList<T>> Ok<T>(IReadOnlyList<T> data) => new() { DataResponse = data, Message = "Thành công.", StatusCode = 200 };
 }

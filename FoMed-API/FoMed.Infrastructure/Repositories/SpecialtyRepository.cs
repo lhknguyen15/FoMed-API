@@ -23,8 +23,8 @@ public sealed class SpecialtyRepository(FoMedDbContext dbContext)
     public Task<Specialty?> GetActiveByIdAsync(
         int specialtyId,
         CancellationToken cancellationToken = default) =>
+        // Reuse the tracked specialty when updating a doctor and its navigation.
         dbContext.Specialties
-            .AsNoTracking()
             .SingleOrDefaultAsync(
                 specialty => specialty.Id == specialtyId && specialty.IsActive,
                 cancellationToken);

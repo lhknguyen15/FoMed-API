@@ -62,6 +62,9 @@ public sealed class DoctorService(IUnitOfWork unitOfWork)
         doctor.LicenseNumber = Normalize(request.LicenseNumber);
         doctor.Phone = Normalize(request.Phone);
         doctor.Room = Normalize(request.Room);
+        doctor.AvatarUrl = Normalize(request.AvatarUrl);
+        doctor.Biography = Normalize(request.Biography);
+        doctor.PracticeStartYear = request.PracticeStartYear;
         doctor.ConsultationFee = request.ConsultationFee;
 
         unitOfWork.DoctorRepository.Update(doctor);
@@ -71,6 +74,24 @@ public sealed class DoctorService(IUnitOfWork unitOfWork)
         {
             DataResponse = Map(doctor),
             Message = DoctorResponseMessageDTO.UpdateDoctorSuccess,
+            StatusCode = 200
+        };
+    }
+
+    public async Task<HTTPResponseData<PublicDoctorDetailResponse?>> GetPublicDoctorAsync(
+        int doctorId, CancellationToken cancellationToken)
+    {
+        var doctor = await unitOfWork.DoctorRepository.GetActiveByIdAsync(doctorId, cancellationToken);
+        if (doctor is null || !doctor.IsActive || !doctor.Specialty.IsActive)
+            return new() { DataResponse = null, Message = DoctorResponseMessageDTO.DoctorNotFound, StatusCode = 404 };
+
+        return new()
+        {
+            DataResponse = new PublicDoctorDetailResponse(doctor.Id, doctor.SpecialtyId,
+                doctor.Specialty.Name, doctor.FullName, doctor.Title, doctor.ConsultationFee,
+                doctor.Room, doctor.AvatarUrl, doctor.Biography, doctor.PracticeStartYear,
+                doctor.Specialty.Description),
+            Message = DoctorResponseMessageDTO.GetDoctorSuccess,
             StatusCode = 200
         };
     }
@@ -91,7 +112,8 @@ public sealed class DoctorService(IUnitOfWork unitOfWork)
                 doctor.Specialty.Name,
                 doctor.FullName,
                 doctor.Title,
-                doctor.ConsultationFee)).ToList(),
+                doctor.ConsultationFee,
+                doctor.AvatarUrl)).ToList(),
             Message = DoctorResponseMessageDTO.GetDoctorsSuccess,
             StatusCode = 200
         };
@@ -136,5 +158,8 @@ public sealed class DoctorService(IUnitOfWork unitOfWork)
         doctor.Phone,
         doctor.Room,
         doctor.ConsultationFee,
-        doctor.IsActive);
+        doctor.IsActive,
+        doctor.AvatarUrl,
+        doctor.Biography,
+        doctor.PracticeStartYear);
 }

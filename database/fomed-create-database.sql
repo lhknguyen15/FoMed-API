@@ -123,12 +123,16 @@ CREATE TABLE scheduling.doctors (
     license_number     VARCHAR(50) NULL,
     phone              VARCHAR(20) NULL,
     room               VARCHAR(50) NULL,
+    avatar_url         NVARCHAR(2048) NULL,
+    biography          NVARCHAR(MAX) NULL,
+    practice_start_year INT NULL,
     consultation_fee   DECIMAL(12,2) NOT NULL DEFAULT 0,
     is_active          BIT NOT NULL DEFAULT 1,
     created_at         DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
     CONSTRAINT FK_doctors_user FOREIGN KEY (user_id) REFERENCES auth.users(id),
     CONSTRAINT FK_doctors_specialty FOREIGN KEY (specialty_id) REFERENCES scheduling.specialties(id),
-    CONSTRAINT UQ_doctors_user UNIQUE (user_id)
+    CONSTRAINT UQ_doctors_user UNIQUE (user_id),
+    CONSTRAINT CK_doctors_practice_start_year CHECK (practice_start_year IS NULL OR practice_start_year BETWEEN 1900 AND 2100)
 );
 CREATE UNIQUE INDEX UX_doctors_license ON scheduling.doctors(license_number) WHERE license_number IS NOT NULL;
 GO

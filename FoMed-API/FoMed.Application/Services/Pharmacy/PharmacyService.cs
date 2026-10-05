@@ -2,6 +2,7 @@ using FoMed.Application.DTO.Pharmacy;
 using FoMed.Application.Services.Clinical;
 using FoMed.Application.Services.Appointment;
 using FoMed.Infrastructure.Models;
+using FoMed.Infrastructure.Models.Enums;
 using FoMed.Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
 
@@ -129,15 +130,92 @@ public sealed class PharmacyService(ClinicRepository repository, ClinicAccess ac
             .ToListAsync(ct);
     }
 
+    public async Task<PharmacyPrescriptionResponse> GetPrescriptionAsync(int userId, int prescriptionId, CancellationToken ct)
+    {
+        await RequirePharmacistAsync(userId, ct);
+        var prescription = await repository.Query<Prescription>().AsNoTracking()
+            .Include(p => p.MedicalRecord).ThenInclude(r => r.Appointment)
+            .Include(p => p.MedicalRecord).ThenInclude(r => r.Patient)
+            .Include(p => p.MedicalRecord).ThenInclude(r => r.Doctor)
+            .Include(p => p.PrescriptionItems).ThenInclude(i => i.Medicine)
+            .Include(p => p.PrescriptionItems).ThenInclude(i => i.PrescriptionDispenses)
+            .SingleOrDefaultAsync(p => p.Id == prescriptionId, ct)
+            ?? throw new ClinicException(404, "Không tìm thấy đơn thuốc.");
+        var legacy = await repository.Query<StockTransaction>().AsNoTracking()
+            .Where(t => t.RefId == prescriptionId && t.Type == 1 && t.Quantity < 0).ToListAsync(ct);
+        var medicineIds = prescription.PrescriptionItems.Select(i => i.MedicineId).Distinct().ToArray();
+        var today = DateOnly.FromDateTime(ClinicTime.Now);
+        var availableBatches = await repository.Query<MedicineBatch>().AsNoTracking()
+            .Where(b => medicineIds.Contains(b.MedicineId) && b.Medicine.IsActive && b.ExpiryDate >= today && b.Quantity > 0)
+            .OrderBy(b => b.ExpiryDate).ThenBy(b => b.Id).ToListAsync(ct);
+        var items = prescription.PrescriptionItems.Select(item =>
+        {
+            var dispensed = item.PrescriptionDispenses.Sum(d => d.Quantity);
+            if (dispensed == 0 && item.BatchId.HasValue && legacy.Any(t => t.BatchId == item.BatchId && t.Quantity <= -item.Quantity))
+                dispensed = item.Quantity;
+            var batches = availableBatches.Where(b => b.MedicineId == item.MedicineId).ToArray();
+            var remaining = Math.Max(0, item.Quantity - dispensed);
+            var need = remaining;
+            var proposals = new List<PharmacyBatchProposal>();
+            foreach (var batch in batches)
+            {
+                if (need == 0) break;
+                var take = Math.Min(need, batch.Quantity);
+                proposals.Add(new(batch.Id, batch.LotNumber, batch.ExpiryDate, batch.Quantity, take));
+                need -= take;
+            }
+            return new PharmacyPrescriptionLineResponse(item.MedicineId, item.Medicine.Name, item.Quantity,
+                dispensed, item.Dosage, item.Instruction) { Unit = item.Medicine.Unit, AvailableQuantity = batches.Sum(b => (long)b.Quantity),
+                RemainingQuantity = remaining, ShortageQuantity = need, ProposedBatches = proposals };
+        }).ToList();
+        var fullyDispensed = items.Count > 0 && items.All(i => i.DispensedQuantity >= i.Quantity);
+        var record = prescription.MedicalRecord;
+        var blocked = DispensingBlockedReason(prescription) ?? (fullyDispensed ? "Đơn thuốc đã được phát đủ." :
+            items.Any(i => i.ShortageQuantity > 0) ? "Tồn khả dụng không đủ để phát toàn bộ đơn. Vui lòng bổ sung thuốc và tải lại tồn kho." : null);
+        return new PharmacyPrescriptionResponse(prescription.Id, record.Id, record.Patient.FullName,
+            record.Patient.PatientCode, record.Doctor.FullName, record.IsFinalized, record.Appointment.Status,
+            await PrescriptionDispensingState.HasDispensedAsync(repository, prescriptionId, ct), fullyDispensed,
+            blocked is null, blocked, items);
+    }
+
+    public async Task<PharmacyPrescriptionPage> ListPrescriptionsAsync(int userId, string? keyword, string? status, int page, CancellationToken ct)
+    {
+        await RequirePharmacistAsync(userId, ct);
+        if (page is < 1 or > 100000 || keyword?.Length > 100 || status is not (null or "pending" or "dispensed"))
+            throw new ClinicException(400, "Bộ lọc đơn thuốc không hợp lệ.");
+        // Match the legacy completion rule used by preview/dispense; never list draft consultations as ready.
+        var eligible = repository.Query<Prescription>().AsNoTracking().Where(p => p.MedicalRecord.IsFinalized &&
+            p.MedicalRecord.Appointment.Status == (byte)AppointmentStatus.Completed && p.PrescriptionItems.Any());
+        var term = keyword?.Trim();
+        if (!string.IsNullOrEmpty(term)) eligible = eligible.Where(p => p.MedicalRecord.Patient.FullName.Contains(term) ||
+            p.MedicalRecord.Patient.PatientCode.Contains(term) || p.Id.ToString() == term);
+        var transactions = repository.Query<StockTransaction>();
+        // Filter an SQL-translatable projection; a positional DTO constructor cannot be queried by its properties.
+        var query = eligible.Select(p => new { PrescriptionId = p.Id, p.MedicalRecordId,
+            PatientName = p.MedicalRecord.Patient.FullName, PatientCode = p.MedicalRecord.Patient.PatientCode,
+            DoctorName = p.MedicalRecord.Doctor.FullName, p.CreatedAt,
+            IsFullyDispensed = p.PrescriptionItems.All(i => (i.PrescriptionDispenses.Sum(d => (int?)d.Quantity) ?? 0) >= i.Quantity ||
+                (!i.PrescriptionDispenses.Any() && i.BatchId.HasValue && transactions.Any(t => t.BatchId == i.BatchId && t.RefId == p.Id && t.Type == 1 && t.Quantity <= -i.Quantity))) });
+        if (status is null or "pending") query = query.Where(p => !p.IsFullyDispensed);
+        else query = query.Where(p => p.IsFullyDispensed);
+        var total = await query.CountAsync(ct);
+        var rows = await query.OrderByDescending(p => p.PrescriptionId).Skip((page - 1) * 10).Take(10).ToListAsync(ct);
+        var items = rows.Select(p => new PharmacyPrescriptionListItem(p.PrescriptionId, p.MedicalRecordId,
+            p.PatientName, p.PatientCode, p.DoctorName, DateTime.SpecifyKind(p.CreatedAt, DateTimeKind.Utc), p.IsFullyDispensed)).ToList();
+        return new(items, page, 10, total);
+    }
+
     public async Task<DispensePrescriptionResponse> DispenseAsync(int userId, int prescriptionId, CancellationToken ct)
     {
         await using var write = await repository.BeginWriteAsync(ct);
         await RequirePharmacistAsync(userId, ct);
         var prescription = await repository.Query<Prescription>().Include(p => p.PrescriptionItems).ThenInclude(i => i.Medicine)
             .Include(p => p.PrescriptionItems).ThenInclude(i => i.PrescriptionDispenses)
+            .Include(p => p.MedicalRecord).ThenInclude(r => r.Appointment)
             .SingleOrDefaultAsync(p => p.Id == prescriptionId, ct)
             ?? throw new ClinicException(404, "Không tìm thấy đơn thuốc.");
-        if (prescription.PrescriptionItems.Count == 0) throw new ClinicException(409, "Đơn thuốc không có thuốc để phát.");
+        var blocked = DispensingBlockedReason(prescription);
+        if (blocked is not null) throw new ClinicException(409, blocked);
         var today = DateOnly.FromDateTime(ClinicTime.Now);
         var lines = new List<DispensedLineResponse>();
         var alreadyDispensed = true;
@@ -159,9 +237,10 @@ public sealed class PharmacyService(ClinicRepository repository, ClinicAccess ac
             }
             if (remaining <= 0) continue;
             alreadyDispensed = false;
+            if (!item.Medicine.IsActive) throw new ClinicException(409, $"Thuốc {item.Medicine.Name} đã ngừng sử dụng.");
             var batches = await repository.Query<MedicineBatch>().Where(b => b.MedicineId == item.MedicineId && b.ExpiryDate >= today && b.Quantity > 0)
                 .OrderBy(b => b.ExpiryDate).ThenBy(b => b.Id).ToListAsync(ct);
-            if (batches.Sum(b => b.Quantity) < remaining) throw new ClinicException(409, $"Không đủ tồn kho cho thuốc {item.Medicine.Name}.");
+            if (batches.Sum(b => (long)b.Quantity) < remaining) throw new ClinicException(409, $"Không đủ tồn kho cho thuốc {item.Medicine.Name}.");
             foreach (var batch in batches)
             {
                 if (remaining == 0) break;
@@ -178,6 +257,13 @@ public sealed class PharmacyService(ClinicRepository repository, ClinicAccess ac
         await repository.SaveAsync(ct);
         await write.CommitAsync(ct);
         return new DispensePrescriptionResponse(prescription.Id, DateTime.UtcNow, alreadyDispensed, lines);
+    }
+
+    private static string? DispensingBlockedReason(Prescription prescription)
+    {
+        if (!prescription.MedicalRecord.IsFinalized || prescription.MedicalRecord.Appointment.Status != (byte)AppointmentStatus.Completed)
+            return "Bệnh án chưa chốt hoặc lượt khám chưa hoàn tất, chưa thể phát thuốc.";
+        return prescription.PrescriptionItems.Count == 0 ? "Đơn thuốc không có thuốc để phát." : null;
     }
 
     private async Task RequirePharmacistAsync(int userId, CancellationToken ct)

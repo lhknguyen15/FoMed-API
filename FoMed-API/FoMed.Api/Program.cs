@@ -16,11 +16,15 @@ var builder = WebApplication.CreateBuilder(args);
 // 2. Các dependency của app được đăng ký vào DI container để service/controller dùng.
 
 builder.Services.AddControllers();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<FoMed.Application.Services.Clinical.IClinicalAuditContext, FoMed.Api.Middleware.ClinicalAuditContext>();
 builder.Services.AddExceptionHandler<FoMed.Api.Middleware.ApiExceptionHandler>();
 builder.Services.AddProblemDetails();
 builder.Services.AddScoped<ClinicRepository>();
 builder.Services.AddScoped<FoMed.Application.Services.Clinical.ClinicAccess>();
 builder.Services.AddScoped<FoMed.Application.Services.Clinical.ClinicalService>();
+builder.Services.AddScoped<FoMed.Application.Services.Clinical.IClinicalAttachmentStore, FoMed.Api.Middleware.PrivateClinicalAttachmentStore>();
+builder.Services.AddScoped<FoMed.Application.Services.Clinical.ClinicalAttachmentService>();
 builder.Services.AddScoped<FoMed.Application.Services.Billing.BillingService>();
 builder.Services.AddScoped<FoMed.Application.Services.Pharmacy.PharmacyService>();
 builder.Services.AddScoped<FoMed.Application.Services.Doctor.DoctorAdminService>();

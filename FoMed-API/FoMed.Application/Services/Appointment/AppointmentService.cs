@@ -3,10 +3,11 @@ using FoMed.Application.DTO.Appointment;
 using FoMed.Infrastructure.Models;
 using FoMed.Infrastructure.Models.Enums;
 using FoMed.Infrastructure.UnitOfWork;
+using FoMed.Application.Services.Clinical;
 
 namespace FoMed.Application.Services.Appointment;
 
-public sealed class AppointmentService(IUnitOfWork unitOfWork)
+public sealed class AppointmentService(IUnitOfWork unitOfWork, IClinicalAuditContext? auditContext = null)
 {
     private readonly IUnitOfWork _unitOfWork = unitOfWork;
     private static readonly TimeSpan PatientChangeCutoff = TimeSpan.FromHours(24);
@@ -353,6 +354,16 @@ public sealed class AppointmentService(IUnitOfWork unitOfWork)
                 .Select(record => new PatientHistorySummary(
                     record.Id, record.AppointmentId, record.CreatedAt, record.Diagnosis, record.Note))
                 .ToList())).ToList();
+        var historyIds = response.SelectMany(item => item.RecentHistory).Select(record => record.MedicalRecordId).Distinct().ToArray();
+        if (historyIds.Length > 0)
+        {
+            var actor = await _unitOfWork.UserRepository.GetByIdWithRolesAsync(currentUserId, cancellationToken)
+                ?? throw new ClinicException(401, "Không tìm thấy người thực hiện.");
+            foreach (var recordId in historyIds)
+                await _unitOfWork.AppointmentRepository.AddAuditLogAsync(
+                    MedicalRecordAudit.Create(currentUserId, actor, "Read", recordId, "DoctorQueueHistory", auditContext), cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+        }
         return new HTTPResponseData<IReadOnlyList<DoctorQueuePatientResponse>>
         {
             DataResponse = response,
@@ -628,6 +639,11 @@ public sealed class AppointmentService(IUnitOfWork unitOfWork)
         appointment.UpdatedAt = DateTime.UtcNow;
         medicalRecord.IsFinalized = true;
         medicalRecord.FinalizedAt = DateTime.UtcNow;
+
+        var auditActor = await _unitOfWork.UserRepository.GetByIdWithRolesAsync(currentUserId, cancellationToken)
+            ?? throw new ClinicException(401, "Không xác định được người thực hiện.");
+        await _unitOfWork.AppointmentRepository.AddAuditLogAsync(MedicalRecordAudit.Create(currentUserId, auditActor,
+            "Finalize", medicalRecord.Id, "FinalizeRecord", auditContext, ["IsFinalized", "FinalizedAt"]), cancellationToken);
 
         await _unitOfWork.AppointmentRepository.AddStatusHistoryAsync(new AppointmentStatusHistory
         {

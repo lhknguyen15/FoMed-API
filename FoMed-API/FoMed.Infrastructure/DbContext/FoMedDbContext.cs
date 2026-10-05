@@ -161,6 +161,10 @@ public partial class FoMedDbContext : Microsoft.EntityFrameworkCore.DbContext
 
         modelBuilder.Entity<Attachment>(entity =>
         {
+            entity.Property(e => e.FileName).HasMaxLength(180).HasColumnName("file_name");
+            entity.Property(e => e.ContentType).HasMaxLength(100).IsUnicode(false).HasColumnName("content_type");
+            entity.Property(e => e.FileSize).HasColumnName("file_size");
+            entity.Property(e => e.UploadedBy).HasColumnName("uploaded_by");
             entity.HasKey(e => e.Id).HasName("PK__attachme__3213E83F4989B857");
 
             entity.ToTable("attachments", "clinical");
@@ -692,6 +696,14 @@ public partial class FoMedDbContext : Microsoft.EntityFrameworkCore.DbContext
                 .HasColumnName("amount");
             entity.Property(e => e.InvoiceId).HasColumnName("invoice_id");
             entity.Property(e => e.Method).HasColumnName("method");
+            entity.Property(e => e.CashReceived).HasColumnType("decimal(18, 2)").HasColumnName("cash_received");
+            entity.Property(e => e.ReceivedBy).HasColumnName("received_by");
+            entity.Property(e => e.ReceivedByNameSnapshot).HasMaxLength(255).HasColumnName("received_by_name_snapshot");
+            entity.Property(e => e.IdempotencyKey).HasColumnName("idempotency_key");
+            entity.HasIndex(e => new { e.ReceivedBy, e.IdempotencyKey }, "UX_payments_actor_idempotency")
+                .IsUnique().HasFilter("[idempotency_key] IS NOT NULL");
+            entity.HasOne(e => e.ReceivedByUser).WithMany().HasForeignKey(e => e.ReceivedBy)
+                .OnDelete(DeleteBehavior.ClientSetNull).HasConstraintName("FK_payments_received_by");
             entity.Property(e => e.Note)
                 .HasMaxLength(255)
                 .HasColumnName("note");

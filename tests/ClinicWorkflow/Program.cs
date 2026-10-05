@@ -25,6 +25,7 @@ Check(!ClinicTime.IsSlot(day.AddTicks(1), new(9, 0), new(12, 0), 30), "Fractiona
 Check(!ClinicTime.IsSlot(day, new(9, 0), new(12, 0), 0), "Invalid duration");
 Check(ClinicTime.Normalize(new DateTime(2030, 1, 7, 2, 0, 0, DateTimeKind.Utc)) == day, "UTC to Vietnam");
 Console.WriteLine($"PASS: {checks} time/slot checks.");
+if (args.Contains("--http")) { await HttpWorkflowAudit.RunAsync(args); return; }
 if (!args.Contains("--sql")) { Console.WriteLine("Use --sql from the repository root to run isolated SQL Server integration checks."); return; }
 
 var config = JsonDocument.Parse(File.ReadAllText("FoMed-API/FoMed.Api/appsettings.Development.json"));
@@ -54,12 +55,19 @@ try
         foreach (var batch in Regex.Split(sql, @"^\s*GO\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase))
             if (!string.IsNullOrWhiteSpace(batch)) await db.Database.ExecuteSqlRawAsync(batch);
 
-        var migration = File.ReadAllText("database/migrations/20260929_add_service_id_to_appointments.sql");
+        var migration = Regex.Replace(File.ReadAllText("database/migrations/20260929_add_service_id_to_appointments.sql"), @"^\s*USE\s+\[?FoMedDb\]?\s*;\s*$", "", RegexOptions.Multiline | RegexOptions.IgnoreCase);
         foreach (var batch in Regex.Split(migration, @"^\s*GO\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase))
             if (!string.IsNullOrWhiteSpace(batch)) await db.Database.ExecuteSqlRawAsync(batch);
 
-        var feeMigration = File.ReadAllText("database/migrations/20260930_add_fee_snapshot_to_appointments.sql");
+        var feeMigration = Regex.Replace(File.ReadAllText("database/migrations/20260930_add_fee_snapshot_to_appointments.sql"), @"^\s*USE\s+\[?FoMedDb\]?\s*;\s*$", "", RegexOptions.Multiline | RegexOptions.IgnoreCase);
         foreach (var batch in Regex.Split(feeMigration, @"^\s*GO\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase))
+            if (!string.IsNullOrWhiteSpace(batch)) await db.Database.ExecuteSqlRawAsync(batch);
+        var attachmentMigration = Regex.Replace(File.ReadAllText("database/migrations/20261005_add_attachment_metadata.sql"), @"^\s*USE\s+\[?FoMedDb\]?\s*;\s*$", "", RegexOptions.Multiline | RegexOptions.IgnoreCase);
+        foreach (var batch in Regex.Split(attachmentMigration, @"^\s*GO\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase))
+            if (!string.IsNullOrWhiteSpace(batch)) await db.Database.ExecuteSqlRawAsync(batch);
+        var cashMigration = Regex.Replace(File.ReadAllText("database/migrations/20261005_add_payment_cash_audit.sql"), @"^\s*USE\s+\[?FoMedDb\]?\s*;\s*$", "", RegexOptions.Multiline | RegexOptions.IgnoreCase);
+        if (Regex.IsMatch(cashMigration, @"\bUSE\s+|\b(?:CREATE|ALTER|DROP)\s+DATABASE\b", RegexOptions.IgnoreCase)) throw new Exception("Cross-database SQL is prohibited.");
+        foreach (var batch in Regex.Split(cashMigration, @"^\s*GO\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase))
             if (!string.IsNullOrWhiteSpace(batch)) await db.Database.ExecuteSqlRawAsync(batch);
     }
     int patientUser, otherPatientUser, doctorUser, otherDoctorUser, receptionistUser, technicianUser, doctorId, secondDoctorId, medicineId, serviceId, inactiveServiceId;
@@ -83,6 +91,7 @@ try
         foreach (var doc in new[] { d.Doctor, d2.Doctor }) doc.DoctorSchedules.Add(new DoctorSchedule { DayOfWeek = (byte)date.DayOfWeek, StartTime = new(9, 0), EndTime = new(12, 0), SlotMinutes = 30, IsActive = true });
         var r = User("Receptionist", "receptionist"); var t = User("Technician", "technician");
         var med = new Medicine { Name = "Test medicine", Unit = "tablet", Price = 10, IsActive = true };
+        med.MedicineBatches.Add(new MedicineBatch { LotNumber = "TEST-STOCK", Quantity = 100, ExpiryDate = date.AddYears(1), CreatedAt = DateTime.UtcNow });
         var svc = new Service { Name = "Test service", Price = 100, IsActive = true };
         var inactiveSvc = new Service { Name = "Inactive test service", Price = 200, IsActive = false };
         db.AddRange(med, svc, inactiveSvc);
@@ -164,7 +173,7 @@ try
     await using (var db = Db()) await Clinical(db).SaveResultAsync(technicianUser, order.Id, new() { ResultSummary = "Test" }, default);
     await using (var db = Db()) Check((await Appointments(db).CompleteAppointmentAsync(doctorUser, booked.Id, new())).StatusCode == 200, "Completion");
     await using (var db = Db()) Check((await Clinical(db).GetRecordAsync(owner, record.Id, default)).Id == record.Id, "Patient finalized record access");
-    await using (var db = Db()) Check((await Appointments(db).CompleteAppointmentAsync(doctorUser, booked.Id, new())).StatusCode == 400, "Repeated completion");
+    await using (var db = Db()) Check((await Appointments(db).CompleteAppointmentAsync(doctorUser, booked.Id, new())).StatusCode == 409, "Repeated completion");
     await using (var db = Db()) Check((await Appointments(db).CancelAppointmentAsync(owner, booked.Id, new CancelAppointmentRequest { Reason = "Test" })).StatusCode == 400, "Cancelled completed appointment");
     var cancellable = more[0].DataResponse!;
     await using (var db = Db()) Check((await Appointments(db).CancelAppointmentAsync(stranger, cancellable.Id, new CancelAppointmentRequest { Reason = "Test" })).StatusCode == 403, "Stranger cancellation");

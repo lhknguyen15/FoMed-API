@@ -35,6 +35,15 @@ public sealed class PharmacyController(PharmacyService service) : ControllerBase
     public async Task<IActionResult> Transactions(int batchId, CancellationToken ct, [FromQuery] int page = 1) =>
         Result(await service.ListTransactionsAsync(UserId, batchId, page, ct));
 
+    [HttpGet("prescriptions/{id:int}"), Authorize(Roles = "Pharmacist,Admin")]
+    public async Task<IActionResult> Prescription(int id, CancellationToken ct) =>
+        Result(await service.GetPrescriptionAsync(UserId, id, ct));
+
+    [HttpGet("prescriptions"), Authorize(Roles = "Pharmacist,Admin")]
+    public async Task<IActionResult> Prescriptions(CancellationToken ct, [FromQuery] string? keyword = null,
+        [FromQuery] string? status = "pending", [FromQuery] int page = 1) =>
+        Result(await service.ListPrescriptionsAsync(UserId, keyword, status, page, ct));
+
     [HttpPost("prescriptions/{id:int}/dispense"), Authorize(Roles = "Pharmacist,Admin")]
     public async Task<IActionResult> Dispense(int id, CancellationToken ct) =>
         Result(await service.DispenseAsync(UserId, id, ct));

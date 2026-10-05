@@ -45,16 +45,19 @@ foreach (var actor in new[] { "patient", "other-patient", "doctor", "other-docto
     var saves = 0;
     var writes = 0;
     var historyReads = 0;
+    var auditWrites = 0;
     var appointments = Stub.Create<IAppointmentRepository>((name, _) => name switch
     {
         "GetByIdWithDetailsAsync" => Task.FromResult<Appointment?>(appointment),
         "GetMedicalRecordForCompletionAsync" => Task.FromResult<MedicalRecord?>(medicalRecord),
         "GetNextQueueNumberAsync" => Task.FromResult(1),
         "AddStatusHistoryAsync" => WriteHistory(),
+        "AddAuditLogAsync" => WriteAudit(),
         "GetStatusHistoryAsync" => ReadHistory(),
         _ => throw new InvalidOperationException(name)
     });
     Task WriteHistory() { writes++; return Task.CompletedTask; }
+    Task WriteAudit() { auditWrites++; return Task.CompletedTask; }
     Task<IReadOnlyList<AppointmentStatusHistory>> ReadHistory()
     {
         historyReads++;
@@ -93,6 +96,7 @@ foreach (var actor in new[] { "patient", "other-patient", "doctor", "other-docto
     Check(status == (allowed ? 200 : 403), $"{operation}/{actor}: status {status}");
     Check(saves == (allowed && operation != "history" ? 1 : 0), "Unexpected save");
     Check(writes == saves, "Unexpected history write");
+    Check(auditWrites == (allowed && operation == "complete" ? 1 : 0), "Completion must audit once; denied operations must not audit success");
     if (operation == "checkin" && allowed)
         Check(appointment.CheckedInAt.HasValue && appointment.QueueNumber == 1, "Check-in did not persist attendance and queue number");
     Check(historyReads == (allowed && operation == "history" ? 1 : 0), "Unauthorized history read");
@@ -173,14 +177,17 @@ foreach (var scenario in completionCases)
     var doctor = new Doctor { Id = 10, IsActive = true };
     var saves = 0;
     var historyWrites = 0;
+    var completionAuditWrites = 0;
     var appointments = Stub.Create<IAppointmentRepository>((name, _) => name switch
     {
         "GetByIdWithDetailsAsync" => Task.FromResult<Appointment?>(appointment),
         "GetMedicalRecordForCompletionAsync" => Task.FromResult(scenario.Record),
         "AddStatusHistoryAsync" => WriteHistory(),
+        "AddAuditLogAsync" => WriteCompletionAudit(),
         _ => throw new InvalidOperationException(name)
     });
     Task WriteHistory() { historyWrites++; return Task.CompletedTask; }
+    Task WriteCompletionAudit() { completionAuditWrites++; return Task.CompletedTask; }
     var users = Stub.Create<IUserRepository>((_, _) => Task.FromResult<User?>(user));
     var doctors = Stub.Create<IDoctorRepository>((_, _) => Task.FromResult<Doctor?>(doctor));
     var uow = Stub.Create<IUnitOfWork>((name, _) => name switch
@@ -197,6 +204,7 @@ foreach (var scenario in completionCases)
     Check(response.StatusCode == scenario.Expected, $"Completion/{scenario.Name}: status {response.StatusCode}");
     Check(saves == (scenario.Expected == 200 ? 1 : 0), $"Completion/{scenario.Name}: unexpected save");
     Check(historyWrites == saves, $"Completion/{scenario.Name}: unexpected history write");
+    Check(completionAuditWrites == saves, $"Completion/{scenario.Name}: missing or unexpected audit write");
     if (scenario.Expected == 200)
         Check(scenario.Record!.IsFinalized && scenario.Record.FinalizedAt.HasValue, "Completed record was not finalized");
     cases++;
@@ -228,7 +236,10 @@ Check(typeof(InvoiceController).GetMethod("Cancel")?.GetCustomAttribute<Authoriz
     "Invoice cancel route is missing cashier role guard");
 Check(typeof(ClinicalController).GetMethod("CancelOrder")?.GetCustomAttribute<AuthorizeAttribute>()?.Roles == "Doctor",
     "Clinical order cancel route is missing doctor role guard");
-foreach (var method in new[] { "Inventory", "Receive", "ReceiveReceipt", "Adjust", "Transactions", "Dispense" })
+foreach (var method in new[] { "PrescribingContext", "SearchMedicines" })
+    Check(typeof(ClinicalController).GetMethod(method)?.GetCustomAttribute<AuthorizeAttribute>()?.Roles == "Doctor",
+        $"Clinical/{method} must be Doctor-only");
+foreach (var method in new[] { "Inventory", "Receive", "ReceiveReceipt", "Adjust", "Transactions", "Prescription", "Dispense" })
     Check(typeof(PharmacyController).GetMethod(method)?.GetCustomAttribute<AuthorizeAttribute>()?.Roles == "Pharmacist,Admin",
         $"Pharmacy route is missing pharmacist role guard on {method}");
 Check(typeof(DoctorAdminController).GetCustomAttribute<AuthorizeAttribute>()?.Roles == "Admin" &&

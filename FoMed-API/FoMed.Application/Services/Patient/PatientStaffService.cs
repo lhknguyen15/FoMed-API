@@ -1,4 +1,5 @@
 using System.Text.Json;
+using FoMed.Application.Services.Clinical;
 using FoMed.Application.DTO;
 using FoMed.Application.DTO.Patient;
 using FoMed.Infrastructure.Models;
@@ -10,7 +11,7 @@ using AppointmentEntity = FoMed.Infrastructure.Models.Appointment;
 
 namespace FoMed.Application.Services.Patient;
 
-public sealed class PatientStaffService(ClinicRepository repository)
+public sealed class PatientStaffService(ClinicRepository repository, IClinicalAuditContext? auditContext = null)
 {
     public async Task<HTTPResponseData<IReadOnlyList<PatientResponse>>> SearchAsync(
         int userId, PatientStaffSearchRequest request, CancellationToken ct)
@@ -104,6 +105,13 @@ public sealed class PatientStaffService(ClinicRepository repository)
             UserId = userId, Action = "Read", Entity = "PatientHistory", EntityId = patientId,
             NewValue = $"patientId={patientId}", CreatedAt = DateTime.UtcNow
         });
+        var recordIds = appointments.Where(a => a.MedicalRecord is not null).Select(a => a.MedicalRecord!.Id).Distinct().ToArray();
+        if (recordIds.Length > 0)
+        {
+            var actor = await repository.Query<User>().Include(u => u.UserRoles).ThenInclude(r => r.Role).SingleAsync(u => u.Id == userId, ct);
+            foreach (var recordId in recordIds)
+                repository.Add(MedicalRecordAudit.Create(userId, actor, "Read", recordId, "PatientHistorySummary", auditContext));
+        }
         await repository.SaveAsync(ct);
         return Success<IReadOnlyList<PatientHistoryResponse>>(response, PatientResponseMessageDTO.PatientHistorySuccess);
     }

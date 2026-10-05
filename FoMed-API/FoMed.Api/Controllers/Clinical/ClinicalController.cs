@@ -38,8 +38,15 @@ public sealed class ClinicalController(ClinicalService service) : ControllerBase
     public async Task<IActionResult> Pending(CancellationToken ct, [FromQuery] int page = 1) => Result(await service.PendingTestsAsync(UserId, page, ct));
     [HttpPost("lab-orders/{id:int}/result"), Authorize(Roles = "Technician")]
     public async Task<IActionResult> Result(int id, SaveLabResultRequest request, CancellationToken ct) => Result(await service.SaveResultAsync(UserId, id, request, ct), 201);
+    [HttpGet("lab-results"), Authorize(Roles = "Technician")]
+    public async Task<IActionResult> History(CancellationToken ct, [FromQuery] int page = 1, [FromQuery] string? keyword = null) => Result(await service.LabHistoryAsync(UserId, keyword, page, ct));
     [HttpGet("medicines")]
     public async Task<IActionResult> Medicines(CancellationToken ct, [FromQuery] int page = 1) => Result(await service.CatalogAsync(true, page, ct));
+    [HttpGet("records/{id:int}/prescribing-context"), Authorize(Roles = "Doctor")]
+    public async Task<IActionResult> PrescribingContext(int id, CancellationToken ct, [FromQuery] int[]? medicineIds = null) => Result(await service.GetPrescribingContextAsync(UserId, id, ct, medicineIds));
+    [HttpGet("medicines/search"), Authorize(Roles = "Doctor")]
+    public async Task<IActionResult> SearchMedicines(CancellationToken ct, [FromQuery] int recordId,
+        [FromQuery] string? keyword = null, [FromQuery] int page = 1) => Result(await service.SearchMedicinesAsync(UserId, recordId, keyword, page, ct));
     [HttpGet("services")]
     public async Task<IActionResult> Services(CancellationToken ct, [FromQuery] int page = 1) => Result(await service.CatalogAsync(false, page, ct));
 }

@@ -105,12 +105,34 @@ public sealed class BillingService(ClinicRepository repository, ClinicAccess acc
     {
         await using var write = await repository.BeginWriteAsync(ct);
         await RequireCashierAsync(userId, ct);
+        if (request.Amount <= 0 || request.Amount > 9999999999.99m || decimal.Round(request.Amount, 2) != request.Amount || request.Method > 3)
+            throw new ClinicException(400, "Số tiền hoặc phương thức thanh toán không hợp lệ.");
+        if (request.CashReceived.HasValue && (request.Method != 0 || request.CashReceived.Value < request.Amount ||
+            request.CashReceived.Value <= 0 || request.CashReceived.Value > 10000000000m || decimal.Truncate(request.CashReceived.Value) != request.CashReceived.Value))
+            throw new ClinicException(400, "Tiền khách đưa phải là số đồng nguyên, không nhỏ hơn tiền thanh toán và chỉ áp dụng cho tiền mặt.");
+        if (request.IdempotencyKey == Guid.Empty) throw new ClinicException(400, "Mã xác nhận thanh toán không hợp lệ.");
+        var note = string.IsNullOrWhiteSpace(request.Note) ? null : request.Note.Trim();
+        if (note?.Length > 255) throw new ClinicException(400, "Ghi chú thanh toán không được vượt quá 255 ký tự.");
+        if (request.IdempotencyKey.HasValue)
+        {
+            var previous = await repository.Query<Payment>().SingleOrDefaultAsync(p => p.ReceivedBy == userId && p.IdempotencyKey == request.IdempotencyKey, ct);
+            if (previous != null)
+            {
+                if (previous.InvoiceId != invoiceId || previous.Amount != request.Amount || previous.Method != request.Method ||
+                    previous.CashReceived != request.CashReceived || !string.Equals(previous.Note, note, StringComparison.Ordinal))
+                    throw new ClinicException(409, "Mã xác nhận đã được dùng cho nội dung thanh toán khác. Vui lòng tải lại hóa đơn.");
+                // Same authenticated cashier + same payload: replay safely, even after settlement.
+                return Map(await Invoices().SingleAsync(i => i.Id == invoiceId, ct));
+            }
+        }
         var invoice = await Invoices().SingleOrDefaultAsync(i => i.Id == invoiceId, ct) ?? throw new ClinicException(404, "Không tìm thấy hóa đơn.");
         var remaining = invoice.TotalAmount - invoice.Payments.Sum(p => p.Amount);
         if (invoice.Status != 0) throw new ClinicException(409, "Hóa đơn đã thanh toán hoặc đã hủy.");
-        if (request.Amount <= 0 || request.Amount > remaining || decimal.Round(request.Amount, 2) != request.Amount || request.Method > 3)
-            throw new ClinicException(400, "Số tiền hoặc phương thức thanh toán không hợp lệ.");
-        invoice.Payments.Add(new Payment { Amount = request.Amount, Method = request.Method, Note = request.Note, PaidAt = DateTime.UtcNow });
+        if (request.Amount > remaining) throw new ClinicException(400, "Số tiền thanh toán vượt quá số dư hóa đơn.");
+        var actor = await repository.Query<User>().Where(u => u.Id == userId).Select(u => new { u.FullName, u.Username }).SingleAsync(ct);
+        invoice.Payments.Add(new Payment { Amount = request.Amount, Method = request.Method, Note = note, PaidAt = DateTime.UtcNow,
+            CashReceived = request.CashReceived, ReceivedBy = userId,
+            ReceivedByNameSnapshot = string.IsNullOrWhiteSpace(actor.FullName) ? actor.Username : actor.FullName.Trim(), IdempotencyKey = request.IdempotencyKey });
         if (request.Amount == remaining) invoice.Status = 1;
         await repository.SaveAsync(ct);
         await write.CommitAsync(ct);
@@ -150,5 +172,6 @@ public sealed class BillingService(ClinicRepository repository, ClinicAccess acc
     private static InvoiceResponse Map(Invoice i) => new(i.Id, i.InvoiceNo, i.PatientId, i.MedicalRecordId, i.TotalAmount,
         i.Payments.Sum(p => p.Amount), i.Status,
         i.InvoiceItems.Select(l => new InvoiceLineResponse(l.Description, l.Quantity, l.UnitPrice, l.Amount)).ToList(),
-        i.Payments.Select(p => new PaymentResponse(p.Id, p.Amount, p.Method, p.PaidAt)).ToList(), i.ConsultationFee);
+        i.Payments.OrderBy(p => p.Id).Select(p => new PaymentResponse(p.Id, p.Amount, p.Method, DateTime.SpecifyKind(p.PaidAt, DateTimeKind.Utc),
+            p.CashReceived, p.ReceivedBy, p.ReceivedByNameSnapshot, p.IdempotencyKey)).ToList(), i.ConsultationFee);
 }

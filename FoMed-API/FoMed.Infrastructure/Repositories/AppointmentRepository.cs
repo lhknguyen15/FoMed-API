@@ -19,6 +19,7 @@ public interface IAppointmentRepository : IRepositoryBase<Appointment>
     Task<bool> IsDoctorOnTimeOffAsync(int doctorId, DateTime startTime, DateTime endTime, CancellationToken cancellationToken = default);
     Task<int> GetNextQueueNumberAsync(int doctorId, DateOnly date, CancellationToken cancellationToken = default);
     Task AddStatusHistoryAsync(AppointmentStatusHistory history, CancellationToken cancellationToken = default);
+    Task AddAuditLogAsync(AuditLog log, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<AppointmentStatusHistory>> GetStatusHistoryAsync(int appointmentId, CancellationToken cancellationToken = default);
 }
 
@@ -26,6 +27,9 @@ public sealed class AppointmentRepository(FoMedDbContext dbContext)
     : RepositoryBase<Appointment>(dbContext), IAppointmentRepository
 {
     private readonly FoMedDbContext dbContext = dbContext;
+
+    public async Task AddAuditLogAsync(AuditLog log, CancellationToken cancellationToken = default) =>
+        await dbContext.AuditLogs.AddAsync(log, cancellationToken);
 
     public async Task<string> GenerateCodeAsync(CancellationToken cancellationToken = default)
     {

@@ -25,6 +25,7 @@ frontend/**/.env*
 *.db
 *.sqlite
 *.sqlite3
+**/App_Data/clinical-attachments/
 
 # OS
 .DS_Store

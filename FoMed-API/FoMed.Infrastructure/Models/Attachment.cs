@@ -14,4 +14,8 @@ public partial class Attachment
     public string FileUrl { get; set; } = null!;
 
     public DateTime UploadedAt { get; set; }
+    public string? FileName { get; set; }
+    public string? ContentType { get; set; }
+    public long? FileSize { get; set; }
+    public int? UploadedBy { get; set; }
 }

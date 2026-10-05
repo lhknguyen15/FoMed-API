@@ -17,5 +17,15 @@ public partial class Payment
 
     public string? Note { get; set; }
 
+    public decimal? CashReceived { get; set; }
+
+    public int? ReceivedBy { get; set; }
+
+    public string? ReceivedByNameSnapshot { get; set; }
+
+    public Guid? IdempotencyKey { get; set; }
+
+    public virtual User? ReceivedByUser { get; set; }
+
     public virtual Invoice Invoice { get; set; } = null!;
 }

@@ -50,7 +50,16 @@ public sealed record MedicalRecordResponse(int Id, int AppointmentId, int Patien
     string? TreatmentPlan, DateOnly? FollowUpDate, bool IsFinalized, DateTime? FinalizedAt,
     DateTime CreatedAt, DateTime? UpdatedAt);
 public sealed record PrescriptionLineResponse(int MedicineId, string MedicineName, int Quantity, decimal UnitPriceSnapshot, string? Dosage, string? Instruction);
-public sealed record PrescriptionResponse(int Id, int MedicalRecordId, string? Note, IReadOnlyList<PrescriptionLineResponse> Items);
+public sealed record PrescriptionResponse(int Id, int MedicalRecordId, string? Note, IReadOnlyList<PrescriptionLineResponse> Items)
+{
+    public bool IsDispensed { get; init; }
+}
 public sealed record ServiceOrderResponse(int Id, int MedicalRecordId, int ServiceId, string ServiceName, byte Status,
     int Quantity, decimal UnitPriceSnapshot, string? ResultSummary, string? Conclusion, string? ReferenceRange, DateTime? ResultAt);
 public sealed record CatalogResponse(int Id, string Name, decimal Price);
+public sealed record PrescribingMedicineResponse(int Id, string Name, string? Unit, decimal Price, long AvailableQuantity);
+public sealed record PrescribingContextResponse(int MedicalRecordId, string PatientName, string? Allergies,
+    IReadOnlyList<PrescribingMedicineResponse> Medicines);
+public sealed record MedicineSearchResponse(IReadOnlyList<PrescribingMedicineResponse> Items, int Page, int PageSize, int TotalCount);
+public sealed record LabResultHistoryItem(ServiceOrderResponse Order, string PatientName, string PatientCode);
+public sealed record LabResultHistoryPage(IReadOnlyList<LabResultHistoryItem> Items, int Page, int PageSize, int Total);

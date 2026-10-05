@@ -51,3 +51,22 @@ public sealed record DispensePrescriptionResponse(int PrescriptionId, DateTime D
 
 public sealed record DispensedLineResponse(int PrescriptionItemId, int MedicineId, string MedicineName, int BatchId,
     string LotNumber, int Quantity, DateOnly ExpiryDate);
+
+public sealed record PharmacyPrescriptionResponse(int PrescriptionId, int MedicalRecordId,
+    string PatientName, string PatientCode, string DoctorName, bool IsFinalized, byte AppointmentStatus,
+    bool IsDispensed, bool IsFullyDispensed, bool CanDispense, string? BlockedReason,
+    IReadOnlyList<PharmacyPrescriptionLineResponse> Items);
+
+public sealed record PharmacyPrescriptionLineResponse(int MedicineId, string MedicineName,
+    int Quantity, int DispensedQuantity, string? Dosage, string? Instruction)
+{
+    public string? Unit { get; init; }
+    public long AvailableQuantity { get; init; }
+    public int RemainingQuantity { get; init; }
+    public int ShortageQuantity { get; init; }
+    public IReadOnlyList<PharmacyBatchProposal> ProposedBatches { get; init; } = [];
+}
+public sealed record PharmacyBatchProposal(int BatchId, string LotNumber, DateOnly ExpiryDate, int AvailableQuantity, int ProposedQuantity);
+public sealed record PharmacyPrescriptionListItem(int PrescriptionId, int MedicalRecordId, string PatientName,
+    string PatientCode, string DoctorName, DateTime CreatedAt, bool IsFullyDispensed);
+public sealed record PharmacyPrescriptionPage(IReadOnlyList<PharmacyPrescriptionListItem> Items, int Page, int PageSize, int Total);

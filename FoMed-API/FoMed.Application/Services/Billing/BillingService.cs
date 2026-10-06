@@ -173,5 +173,6 @@ public sealed class BillingService(ClinicRepository repository, ClinicAccess acc
         i.Payments.Sum(p => p.Amount), i.Status,
         i.InvoiceItems.Select(l => new InvoiceLineResponse(l.Description, l.Quantity, l.UnitPrice, l.Amount)).ToList(),
         i.Payments.OrderBy(p => p.Id).Select(p => new PaymentResponse(p.Id, p.Amount, p.Method, DateTime.SpecifyKind(p.PaidAt, DateTimeKind.Utc),
-            p.CashReceived, p.ReceivedBy, p.ReceivedByNameSnapshot, p.IdempotencyKey)).ToList(), i.ConsultationFee);
+            p.CashReceived, p.ReceivedBy, p.ReceivedByNameSnapshot, p.IdempotencyKey,
+            p.Provider, p.ProviderEnvironment, p.ProviderTransactionId)).ToList(), i.ConsultationFee);
 }

@@ -14,6 +14,18 @@ using FoMed.Infrastructure.UnitOfWork;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 
+var supportedArguments = new HashSet<string>(StringComparer.Ordinal)
+{
+    "--sql", "--http", "--hosting-only", "--sepay-only", "--cash-only",
+    "--dispensing-only", "--browser", "--journey-only"
+};
+if (args.Any(argument => !supportedArguments.Contains(argument)))
+{
+    Console.Error.WriteLine("Unsupported audit argument. Use --sql, --hosting-only, or --http with supported focus options.");
+    Environment.ExitCode = 2;
+    return;
+}
+
 var checks = 0;
 void Check(bool ok, string message) { if (!ok) throw new Exception(message); checks++; }
 var day = new DateTime(2030, 1, 7, 9, 0, 0);
@@ -25,6 +37,8 @@ Check(!ClinicTime.IsSlot(day.AddTicks(1), new(9, 0), new(12, 0), 30), "Fractiona
 Check(!ClinicTime.IsSlot(day, new(9, 0), new(12, 0), 0), "Invalid duration");
 Check(ClinicTime.Normalize(new DateTime(2030, 1, 7, 2, 0, 0, DateTimeKind.Utc)) == day, "UTC to Vietnam");
 Console.WriteLine($"PASS: {checks} time/slot checks.");
+SePayAudit.RunUnitChecks();
+if (args.Contains("--hosting-only")) { await CloudHostingAudit.RunAsync(); return; }
 if (args.Contains("--http")) { await HttpWorkflowAudit.RunAsync(args); return; }
 if (!args.Contains("--sql")) { Console.WriteLine("Use --sql from the repository root to run isolated SQL Server integration checks."); return; }
 
@@ -68,6 +82,10 @@ try
         var cashMigration = Regex.Replace(File.ReadAllText("database/migrations/20261005_add_payment_cash_audit.sql"), @"^\s*USE\s+\[?FoMedDb\]?\s*;\s*$", "", RegexOptions.Multiline | RegexOptions.IgnoreCase);
         if (Regex.IsMatch(cashMigration, @"\bUSE\s+|\b(?:CREATE|ALTER|DROP)\s+DATABASE\b", RegexOptions.IgnoreCase)) throw new Exception("Cross-database SQL is prohibited.");
         foreach (var batch in Regex.Split(cashMigration, @"^\s*GO\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase))
+            if (!string.IsNullOrWhiteSpace(batch)) await db.Database.ExecuteSqlRawAsync(batch);
+        var sepayMigration = Regex.Replace(File.ReadAllText("database/migrations/20261005_add_sepay_payments.sql"), @"^\s*USE\s+\[?FoMedDb\]?\s*;\s*$", "", RegexOptions.Multiline | RegexOptions.IgnoreCase);
+        if (Regex.IsMatch(sepayMigration, @"\bUSE\s+|\b(?:CREATE|ALTER|DROP)\s+DATABASE\b", RegexOptions.IgnoreCase)) throw new Exception("Cross-database SQL is prohibited.");
+        foreach (var batch in Regex.Split(sepayMigration, @"^\s*GO\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase))
             if (!string.IsNullOrWhiteSpace(batch)) await db.Database.ExecuteSqlRawAsync(batch);
     }
     int patientUser, otherPatientUser, doctorUser, otherDoctorUser, receptionistUser, technicianUser, doctorId, secondDoctorId, medicineId, serviceId, inactiveServiceId;

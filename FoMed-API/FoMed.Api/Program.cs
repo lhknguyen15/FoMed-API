@@ -11,6 +11,12 @@ using Microsoft.OpenApi;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
+FoMed.Api.Middleware.CloudHostingConfiguration.ValidateRenderDatabase(builder.Configuration);
+var corsOrigins = FoMed.Api.Middleware.CloudHostingConfiguration.CorsOrigins(builder.Configuration, builder.Environment.IsProduction());
+builder.Services.AddCors(options => options.AddPolicy("Frontend", policy =>
+{
+    if (corsOrigins.Length > 0) policy.WithOrigins(corsOrigins).AllowAnyHeader().AllowAnyMethod();
+}));
 
 // 1. Khởi tạo các service dùng cho API: controller, Swagger, EF Core, JWT.
 // 2. Các dependency của app được đăng ký vào DI container để service/controller dùng.
@@ -26,6 +32,15 @@ builder.Services.AddScoped<FoMed.Application.Services.Clinical.ClinicalService>(
 builder.Services.AddScoped<FoMed.Application.Services.Clinical.IClinicalAttachmentStore, FoMed.Api.Middleware.PrivateClinicalAttachmentStore>();
 builder.Services.AddScoped<FoMed.Application.Services.Clinical.ClinicalAttachmentService>();
 builder.Services.AddScoped<FoMed.Application.Services.Billing.BillingService>();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddOptions<FoMed.Infrastructure.Payments.SePayOptions>()
+    .BindConfiguration(FoMed.Infrastructure.Payments.SePayOptions.SectionName)
+    .Validate(options => options.IsValid(), "SePay configuration is invalid; bank/account, HMAC secret and environment must be configured.")
+    .Validate(options => options.CanUseDatabase(new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(builder.Configuration.GetConnectionString("DefaultConnection")).InitialCatalog),
+        "SePay requires an application database. Test mode requires an explicitly acknowledged demo database matching SePay:TestDatabaseName; Live must not use that demo database.")
+    .ValidateOnStart();
+builder.Services.AddScoped<FoMed.Application.Services.Billing.SePayService>();
+builder.Services.AddScoped<FoMed.Application.Services.Billing.SePayWebhookAuthenticator>();
 builder.Services.AddScoped<FoMed.Application.Services.Pharmacy.PharmacyService>();
 builder.Services.AddScoped<FoMed.Application.Services.Doctor.DoctorAdminService>();
 builder.Services.AddScoped<FoMed.Application.Services.Doctor.DoctorTimeOffService>();
@@ -129,11 +144,14 @@ if (app.Environment.IsDevelopment())
 }
 
 // Middleware xác thực và phân quyền phải đứng trước controller.
+// Render terminates TLS and redirects HTTP at its edge. Never trust arbitrary forwarded headers.
+if (!FoMed.Api.Middleware.CloudHostingConfiguration.IsRender(builder.Configuration)) app.UseHttpsRedirection();
+app.UseCors("Frontend");
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
-// Chuyển hướng HTTPS nếu cần thiết.
-app.UseHttpsRedirection();
+// Liveness only: Render health polling must not keep Azure SQL serverless awake.
+app.MapGet("/health", () => Results.Json(new { status = "ok" })).AllowAnonymous();
 
 app.Run();

@@ -1,0 +1,17 @@
+# Allowlist: only API source enters the image build context.
+**
+!FoMed-API/
+!FoMed-API/**
+FoMed-API/**/bin/
+FoMed-API/**/obj/
+FoMed-API/**/App_Data/
+FoMed-API/**/appsettings.Development.json
+FoMed-API/**/appsettings.*.local.json
+FoMed-API/**/appsettings.SePay.example.json
+FoMed-API/**/.env*
+FoMed-API/**/*.user
+FoMed-API/**/secrets.json
+FoMed-API/**/*.pfx
+FoMed-API/**/*.pem
+FoMed-API/**/*.key
+FoMed-API/**/.git/

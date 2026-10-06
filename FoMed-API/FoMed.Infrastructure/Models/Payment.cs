@@ -25,6 +25,12 @@ public partial class Payment
 
     public Guid? IdempotencyKey { get; set; }
 
+    public string? Provider { get; set; }
+
+    public string? ProviderEnvironment { get; set; }
+
+    public long? ProviderTransactionId { get; set; }
+
     public virtual User? ReceivedByUser { get; set; }
 
     public virtual Invoice Invoice { get; set; } = null!;

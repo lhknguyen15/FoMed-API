@@ -92,6 +92,19 @@ internal static class HttpWorkflowAudit
             start.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
             start.Environment["ConnectionStrings__DefaultConnection"] = builder.ConnectionString;
             start.Environment["ClinicalAttachments__StoragePath"] = attachmentRoot;
+            if (args.Contains("--sepay-only"))
+            {
+                start.Environment["SePay__Enabled"] = "true";
+                start.Environment["SePay__Environment"] = "Test";
+                start.Environment["SePay__AllowLivePayments"] = "false";
+                start.Environment["SePay__TestDatabaseName"] = name;
+                start.Environment["SePay__BankCode"] = "MB";
+                start.Environment["SePay__Gateway"] = "MBBank";
+                start.Environment["SePay__AccountNumber"] = SePayAudit.Account;
+                start.Environment["SePay__AccountName"] = "FOMED AUDIT ONLY";
+                start.Environment["SePay__WebhookSecret"] = SePayAudit.Secret;
+            }
+            else start.Environment["SePay__Enabled"] = "false";
             api = Process.Start(start) ?? throw new Exception("Cannot start isolated API");
             // Drain logs, but never persist configuration/secrets to audit artifacts.
             api.BeginOutputReadLine(); api.BeginErrorReadLine();
@@ -170,6 +183,18 @@ internal static class HttpWorkflowAudit
                 tokens[role] = login.GetProperty("accessToken").GetString()!;
             }
             var today = DateOnly.FromDateTime(ClinicTime.Now);
+            if (args.Contains("--sepay-only"))
+            {
+                await SePayAudit.RunAsync(options, client, Call, Check);
+                if (failed > 0) Environment.ExitCode = 1;
+                return;
+            }
+            if (args.Contains("--cash-only"))
+            {
+                await PaymentCashAudit.RunAsync(options, Call, Check);
+                if (failed > 0) Environment.ExitCode = 1;
+                return;
+            }
             var slots = await Need(null, "GET", $"/api/appointments/available-slots?doctorId={doctorId}&date={today:yyyy-MM-dd}", null, 200, "VC-03 available slots");
             var available = slots.EnumerateArray().Where(s => s.GetProperty("isAvailable").GetBoolean()).ToArray();
             if (available.Length < 2) throw new Exception("Audit requires two future slots today; run before the final slot.");

@@ -988,6 +988,7 @@ public partial class FoMedDbContext : Microsoft.EntityFrameworkCore.DbContext
         modelBuilder.HasSequence<int>("seq_invoice_no", "billing");
         modelBuilder.HasSequence<int>("seq_patient_code", "scheduling");
 
+        ConfigureSePay(modelBuilder);
         OnModelCreatingPartial(modelBuilder);
     }
 

@@ -15,7 +15,8 @@ public sealed record RecordPaymentRequest
 }
 public sealed record InvoiceLineResponse(string? Description, int Quantity, decimal UnitPrice, decimal Amount);
 public sealed record PaymentResponse(int Id, decimal Amount, byte Method, DateTime PaidAt,
-    decimal? CashReceived = null, int? ReceivedBy = null, string? ReceivedByName = null, Guid? IdempotencyKey = null)
+    decimal? CashReceived = null, int? ReceivedBy = null, string? ReceivedByName = null, Guid? IdempotencyKey = null,
+    string? Provider = null, string? ProviderEnvironment = null, long? ProviderTransactionId = null)
 {
     public decimal? ChangeAmount => Method == 0 && CashReceived.HasValue ? CashReceived.Value - Amount : null;
 }

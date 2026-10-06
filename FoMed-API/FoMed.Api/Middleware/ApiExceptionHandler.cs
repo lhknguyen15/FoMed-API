@@ -11,8 +11,10 @@ public sealed class ApiExceptionHandler(ILogger<ApiExceptionHandler> logger) : I
     {
         var sql = exception as SqlException ?? exception.InnerException as SqlException;
         var status = exception is ClinicException clinic ? clinic.StatusCode :
+            exception is BadHttpRequestException badRequest ? badRequest.StatusCode :
             sql?.Number is 2601 or 2627 or 1205 or 51001 ? 409 : 500;
-        var message = exception is ClinicException ? exception.Message : status == 409
+        var message = exception is ClinicException ? exception.Message : status == 413
+            ? "Yêu cầu vượt giới hạn kích thước cho phép." : status == 409
             ? "Dữ liệu đã thay đổi hoặc đang được xử lý. Vui lòng tải lại và thử lại."
             : "Có lỗi khi xử lý yêu cầu.";
         if (status == 500) logger.LogError(exception, "Request failed: {Path}", context.Request.Path);

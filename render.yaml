@@ -1,0 +1,35 @@
+# Azure SQL is provisioned separately; no Render Postgres and no paid disk.
+services:
+  - type: web
+    name: fomed-api-demo
+    runtime: docker
+    plan: free
+    region: singapore
+    branch: feat/hoan-thien-quy-trinh-phong-kham
+    dockerfilePath: ./FoMed-API/Dockerfile
+    dockerContext: .
+    autoDeployTrigger: "off"
+    healthCheckPath: /health
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: ConnectionStrings__DefaultConnection
+        sync: false
+      - key: Jwt__Key
+        generateValue: true
+      - key: Jwt__Issuer
+        value: FoMed.Api.CloudDemo
+      - key: Jwt__Audience
+        value: FoMed.Frontend.CloudDemo
+      - key: Cors__AllowedOrigins__0
+        value: http://localhost:5174
+      - key: ClinicalAttachments__Enabled
+        value: "false"
+      - key: SePay__Enabled
+        value: "false"
+      - key: SePay__Environment
+        value: Test
+      - key: SePay__AllowLivePayments
+        value: "false"
+      - key: SePay__TestDatabaseName
+        sync: false

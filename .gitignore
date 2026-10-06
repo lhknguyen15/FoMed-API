@@ -25,6 +25,10 @@ frontend/**/.env*
 *.db
 *.sqlite
 *.sqlite3
+*.bacpac
+*.dacpac
+*.bak
+deploy-private/
 **/App_Data/clinical-attachments/
 
 # OS

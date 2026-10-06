@@ -7,6 +7,11 @@ public sealed class PrivateClinicalAttachmentStore(IWebHostEnvironment environme
 {
     // Outside wwwroot; never mounted by static-file middleware. Override with a persistent private volume in production.
     private readonly string root = Path.GetFullPath(configuration["ClinicalAttachments:StoragePath"] ?? Path.Combine(environment.ContentRootPath, "App_Data", "clinical-attachments"));
+    private readonly bool enabled = configuration.GetValue("ClinicalAttachments:Enabled", true);
+    private void RequireEnabled()
+    {
+        if (!enabled) throw new ClinicException(503, "Tệp đính kèm tạm chưa khả dụng trên môi trường demo cloud; cần cấu hình kho lưu trữ bền vững.");
+    }
     private string Resolve(string key)
     {
         if (!Regex.IsMatch(key, "^[a-f0-9]{32}\\.(jpg|jpeg|png|pdf|dicom|dcm)$", RegexOptions.CultureInvariant))
@@ -15,6 +20,7 @@ public sealed class PrivateClinicalAttachmentStore(IWebHostEnvironment environme
     }
     public async Task<string> SaveAsync(byte[] bytes, string extension, CancellationToken ct)
     {
+        RequireEnabled();
         Directory.CreateDirectory(root);
         var key = Guid.NewGuid().ToString("N") + extension;
         var path = Resolve(key);
@@ -24,6 +30,7 @@ public sealed class PrivateClinicalAttachmentStore(IWebHostEnvironment environme
     }
     public async Task<byte[]> ReadAsync(string key, CancellationToken ct)
     {
+        RequireEnabled();
         var path = Resolve(key);
         if (!File.Exists(path)) throw new ClinicException(404, "File không còn trong kho lưu trữ.");
         if (new FileInfo(path).Length is <= 0 or > ClinicalAttachmentService.MaxBytes)

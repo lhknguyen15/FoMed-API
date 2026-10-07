@@ -14,6 +14,9 @@ public sealed class InvoiceController(BillingService service) : ControllerBase
     private ObjectResult Result<T>(T data, int status = 200) => StatusCode(status, new HTTPResponseData<T> { DataResponse = data, Message = "Thành công.", StatusCode = status });
     [HttpGet]
     public async Task<IActionResult> List(CancellationToken ct, [FromQuery] int page = 1) => Result(await service.ListAsync(UserId, page, ct));
+    [HttpGet("search"), Authorize(Roles = "Receptionist,Admin")]
+    public async Task<IActionResult> Search([FromQuery] InvoiceSearchRequest request, CancellationToken ct) =>
+        Result(await service.SearchAsync(UserId, request, ct));
     [HttpGet("eligible"), Authorize(Roles = "Receptionist,Admin")]
     public async Task<IActionResult> Eligible(CancellationToken ct, [FromQuery] int page = 1) =>
         Result(await service.ListEligibleAsync(UserId, page, ct));

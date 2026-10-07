@@ -142,6 +142,7 @@ dotnet run --project tests/DoctorProfiles
 dotnet run --project tests/DoctorHistory
 dotnet run --project tests/DoctorResume
 dotnet run --project tests/Reports
+dotnet run --project tests/InvoiceSearch
 dotnet run --project tests/ClinicWorkflow -- --hosting-only
 ```
 

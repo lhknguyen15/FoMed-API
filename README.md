@@ -1,5 +1,7 @@
 # FoMed-API
 
+Xem [tổng quan dự án FoMed, link demo và hai repository](docs/FOMED-OVERVIEW.md).
+
 Backend của **FoMed — hệ thống quản lý phòng khám**, phục vụ đặt lịch, tiếp đón,
 khám bệnh, cận lâm sàng, kê đơn, kho thuốc, thu ngân và quản trị. Frontend React
 được quản lý trong repository độc lập, không nằm trong solution .NET này.
@@ -190,6 +192,8 @@ API Access/API key của SePay không thay thế việc xác thực webhook HMAC
 
 ## Tài liệu nghiệp vụ
 
+- [FM-05: giới hạn đăng nhập/đăng ký và lưu ý proxy Render](docs/fm-05-auth-rate-limit.md)
+- [Nghiệm thu quy trình FM-04 và kiểm thử cục bộ](docs/fm-04-workflow-acceptance.md)
 - [Quy trình phòng khám](docs/clinic-workflow.md)
 - [Hồ sơ bác sĩ](docs/doctor-public-profile.md)
 - [Thu tiền mặt và lịch sử thu](docs/payment-cash-audit.md)

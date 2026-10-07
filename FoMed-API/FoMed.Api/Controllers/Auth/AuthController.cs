@@ -2,6 +2,8 @@ using FoMed.Application.DTO.Auth;
 using FoMed.Application.DTO;
 using FoMed.Application.Services.Auth;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using FoMed.Api.Middleware;
 
 namespace FoMed.Api.Controllers;
 
@@ -11,6 +13,8 @@ public sealed class AuthController(AuthService authService) : ControllerBase
 {
     // Đăng ký tài khoản mới cho người dùng.
     [HttpPost("register")]
+    [EnableRateLimiting(AuthRateLimiting.RegisterPolicy)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     [ProducesResponseType(typeof(HTTPResponseData<AuthResponse?>), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(HTTPResponseData<AuthResponse?>), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(HTTPResponseData<AuthResponse?>), StatusCodes.Status409Conflict)]
@@ -26,6 +30,8 @@ public sealed class AuthController(AuthService authService) : ControllerBase
 
     // Đăng nhập và trả về JWT token nếu thông tin hợp lệ.
     [HttpPost("login")]
+    [EnableRateLimiting(AuthRateLimiting.LoginPolicy)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     [ProducesResponseType(typeof(HTTPResponseData<AuthResponse?>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(HTTPResponseData<AuthResponse?>), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(HTTPResponseData<AuthResponse?>), StatusCodes.Status401Unauthorized)]

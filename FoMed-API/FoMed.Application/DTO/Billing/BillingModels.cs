@@ -22,7 +22,7 @@ public sealed record PaymentResponse(int Id, decimal Amount, byte Method, DateTi
 }
 public sealed record InvoiceResponse(int Id, string InvoiceNo, int PatientId, int? MedicalRecordId,
     decimal TotalAmount, decimal PaidAmount, byte Status, IReadOnlyList<InvoiceLineResponse> Items, IReadOnlyList<PaymentResponse> Payments,
-    decimal ConsultationFee)
+    decimal ConsultationFee, string? PatientName = null, string? PatientCode = null, DateTime? CreatedAt = null)
 {
     public decimal RemainingAmount => Math.Max(TotalAmount - PaidAmount, 0m);
     public string StatusName => Status switch

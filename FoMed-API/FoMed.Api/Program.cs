@@ -12,10 +12,11 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 FoMed.Api.Middleware.CloudHostingConfiguration.ValidateRenderDatabase(builder.Configuration);
+var authRateLimits = FoMed.Api.Middleware.AuthRateLimiting.AddAuthRateLimits(builder.Services, builder.Configuration, builder.Environment.EnvironmentName);
 var corsOrigins = FoMed.Api.Middleware.CloudHostingConfiguration.CorsOrigins(builder.Configuration, builder.Environment.IsProduction());
 builder.Services.AddCors(options => options.AddPolicy("Frontend", policy =>
 {
-    if (corsOrigins.Length > 0) policy.WithOrigins(corsOrigins).AllowAnyHeader().AllowAnyMethod();
+    if (corsOrigins.Length > 0) policy.WithOrigins(corsOrigins).AllowAnyHeader().AllowAnyMethod().WithExposedHeaders("Retry-After");
 }));
 
 // 1. Khởi tạo các service dùng cho API: controller, Swagger, EF Core, JWT.
@@ -42,6 +43,7 @@ builder.Services.AddOptions<FoMed.Infrastructure.Payments.SePayOptions>()
 builder.Services.AddScoped<FoMed.Application.Services.Billing.SePayService>();
 builder.Services.AddScoped<FoMed.Application.Services.Billing.SePayWebhookAuthenticator>();
 builder.Services.AddScoped<FoMed.Application.Services.Pharmacy.PharmacyService>();
+builder.Services.AddScoped<FoMed.Application.Services.Pharmacy.MedicineCatalogAdminService>();
 builder.Services.AddScoped<FoMed.Application.Services.Doctor.DoctorAdminService>();
 builder.Services.AddScoped<FoMed.Application.Services.Doctor.DoctorTimeOffService>();
 builder.Services.AddScoped<FoMed.Application.Services.Billing.ServiceCatalogAdminService>();
@@ -146,9 +148,12 @@ if (app.Environment.IsDevelopment())
 // Middleware xác thực và phân quyền phải đứng trước controller.
 // Render terminates TLS and redirects HTTP at its edge. Never trust arbitrary forwarded headers.
 if (!FoMed.Api.Middleware.CloudHostingConfiguration.IsRender(builder.Configuration)) app.UseHttpsRedirection();
+app.UseRouting();
+FoMed.Api.Middleware.AuthRateLimiting.UseAuthProxyIdentity(app, authRateLimits);
 app.UseCors("Frontend");
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 app.MapControllers();
 
 // Liveness only: Render health polling must not keep Azure SQL serverless awake.

@@ -1,4 +1,3 @@
-using System.Text.Json;
 using System.Text.RegularExpressions;
 using FoMed.Application.DTO.Appointment;
 using FoMed.Application.DTO.Clinical;
@@ -17,7 +16,7 @@ using Microsoft.EntityFrameworkCore;
 var supportedArguments = new HashSet<string>(StringComparer.Ordinal)
 {
     "--sql", "--http", "--hosting-only", "--sepay-only", "--cash-only",
-    "--dispensing-only", "--browser", "--journey-only"
+    "--dispensing-only", "--browser", "--journey-only", "--rate-limit-only"
 };
 if (args.Any(argument => !supportedArguments.Contains(argument)))
 {
@@ -38,14 +37,13 @@ Check(!ClinicTime.IsSlot(day, new(9, 0), new(12, 0), 0), "Invalid duration");
 Check(ClinicTime.Normalize(new DateTime(2030, 1, 7, 2, 0, 0, DateTimeKind.Utc)) == day, "UTC to Vietnam");
 Console.WriteLine($"PASS: {checks} time/slot checks.");
 SePayAudit.RunUnitChecks();
+if (args.Contains("--rate-limit-only")) { await AuthRateLimitAudit.RunIsolatedChecksAsync(); if (!args.Contains("--http")) return; }
 if (args.Contains("--hosting-only")) { await CloudHostingAudit.RunAsync(); return; }
 if (args.Contains("--http")) { await HttpWorkflowAudit.RunAsync(args); return; }
 if (!args.Contains("--sql")) { Console.WriteLine("Use --sql from the repository root to run isolated SQL Server integration checks."); return; }
 
-var config = JsonDocument.Parse(File.ReadAllText("FoMed-API/FoMed.Api/appsettings.Development.json"));
-var builder = new SqlConnectionStringBuilder(config.RootElement.GetProperty("ConnectionStrings").GetProperty("DefaultConnection").GetString());
 var name = "FoMed_Test_" + Guid.NewGuid().ToString("N");
-builder.InitialCatalog = "master"; builder.ConnectTimeout = 5;
+var builder = LocalAuditDatabase.Master(name);
 await using var admin = new SqlConnection(builder.ConnectionString);
 await admin.OpenAsync();
 await new SqlCommand($"CREATE DATABASE [{name}]", admin).ExecuteNonQueryAsync();
@@ -226,6 +224,6 @@ finally
 {
     SqlConnection.ClearAllPools();
     // Only the uniquely named database created by this run is ever removed.
-    if (!Regex.IsMatch(name, "^FoMed_Test_[a-f0-9]{32}$")) throw new Exception("Invalid test database name");
+    LocalAuditDatabase.Guard(builder, name);
     await new SqlCommand($"ALTER DATABASE [{name}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{name}]", admin).ExecuteNonQueryAsync();
 }

@@ -48,7 +48,7 @@ Runner HTTP/JWT `tests/ClinicWorkflow/HttpWorkflowAudit.cs` bổ sung:
 Chạy từ repository gốc sau build API/test vào output riêng:
 
 ```powershell
-dotnet build FoMed-API/FoMed.Api/FoMed.Api.csproj --no-restore -o FoMed-API/FoMed.Api/bin/WorkflowAudit
+dotnet publish FoMed-API/FoMed.Api/FoMed.Api.csproj -c Release --no-restore -o FoMed-API/FoMed.Api/bin/WorkflowAuditPublish
 dotnet build tests/ClinicWorkflow/ClinicWorkflow.csproj --no-restore -o tests/ClinicWorkflow/bin/HttpAudit
 dotnet tests/ClinicWorkflow/bin/HttpAudit/ClinicWorkflow.dll --http --dispensing-only
 ```

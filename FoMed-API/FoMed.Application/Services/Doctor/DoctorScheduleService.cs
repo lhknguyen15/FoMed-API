@@ -2,10 +2,11 @@ using FoMed.Application.DTO;
 using FoMed.Application.DTO.Doctor;
 using FoMed.Infrastructure.Models;
 using FoMed.Infrastructure.UnitOfWork;
+using FoMed.Infrastructure.Repositories;
 
 namespace FoMed.Application.Services.Doctor;
 
-public sealed class DoctorScheduleService(IUnitOfWork unitOfWork)
+public sealed class DoctorScheduleService(IUnitOfWork unitOfWork, ClinicRepository repository)
 {
     // Lấy các khung giờ active của bác sĩ đang đăng nhập.
     public async Task<HTTPResponseData<IReadOnlyList<DoctorScheduleResponse>>> GetMySchedulesAsync(
@@ -103,6 +104,7 @@ public sealed class DoctorScheduleService(IUnitOfWork unitOfWork)
             return validation;
         }
 
+        await DoctorScheduleSafety.EnsureAsync(repository, schedule, new DoctorSchedule { DoctorId = doctor.Id, DayOfWeek = request.DayOfWeek, StartTime = request.StartTime, EndTime = request.EndTime, SlotMinutes = request.SlotMinutes, IsActive = true }, cancellationToken);
         schedule.DayOfWeek = request.DayOfWeek;
         schedule.StartTime = request.StartTime;
         schedule.EndTime = request.EndTime;
@@ -142,6 +144,7 @@ public sealed class DoctorScheduleService(IUnitOfWork unitOfWork)
             return ScheduleNotFoundResponse();
         }
 
+        await DoctorScheduleSafety.EnsureAsync(repository, schedule, new DoctorSchedule(), cancellationToken);
         schedule.IsActive = false;
         unitOfWork.DoctorScheduleRepository.Update(schedule);
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -168,7 +171,9 @@ public sealed class DoctorScheduleService(IUnitOfWork unitOfWork)
         int? excludedScheduleId,
         CancellationToken cancellationToken)
     {
-        if (request.EndTime <= request.StartTime)
+        if (request.DayOfWeek > 6 || request.EndTime <= request.StartTime || request.SlotMinutes is < 5 or > 240 ||
+            request.StartTime.Ticks % TimeSpan.TicksPerMinute != 0 || request.EndTime.Ticks % TimeSpan.TicksPerMinute != 0 ||
+            (request.EndTime - request.StartTime).TotalMinutes < request.SlotMinutes)
         {
             return new HTTPResponseData<DoctorScheduleResponse?>
             {

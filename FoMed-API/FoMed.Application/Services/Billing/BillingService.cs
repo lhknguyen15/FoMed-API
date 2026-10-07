@@ -26,7 +26,7 @@ public sealed class BillingService(ClinicRepository repository, ClinicAccess acc
         var invoice = new Invoice
         {
             InvoiceNo = await repository.NextInvoiceNumberAsync(ct), MedicalRecordId = record.Id,
-            AppointmentId = record.AppointmentId, PatientId = record.PatientId, PatientName = record.Patient.FullName,
+            AppointmentId = record.AppointmentId, PatientId = record.PatientId, Patient = record.Patient, PatientName = record.Patient.FullName,
             CreatedBy = userId, CreatedAt = DateTime.UtcNow,
             ConsultationFee = record.Appointment.FeeSnapshot ?? 0m
         };
@@ -41,7 +41,8 @@ public sealed class BillingService(ClinicRepository repository, ClinicAccess acc
         {
             foreach (var item in record.Prescription.PrescriptionItems)
             {
-                var unitPrice = item.UnitPriceSnapshot > 0 ? item.UnitPriceSnapshot : item.Medicine.Price;
+                // Zero is a valid saved price, not a signal to use today's catalog price.
+                var unitPrice = item.UnitPriceSnapshot;
                 invoice.InvoiceItems.Add(new InvoiceItem { MedicineId = item.MedicineId, Description = item.Medicine.Name, Quantity = item.Quantity, UnitPrice = unitPrice, Amount = item.Quantity * unitPrice });
             }
         }
@@ -147,7 +148,7 @@ public sealed class BillingService(ClinicRepository repository, ClinicAccess acc
         {
             var lineAmount = r.MedicalRecordServices.Where(o => o.Status == 1)
                 .Sum(o => o.Quantity * (o.UnitPriceSnapshot > 0 ? o.UnitPriceSnapshot : o.Service.Price))
-                + (r.Prescription?.PrescriptionItems.Sum(i => i.Quantity * (i.UnitPriceSnapshot > 0 ? i.UnitPriceSnapshot : i.Medicine.Price)) ?? 0m);
+                + (r.Prescription?.PrescriptionItems.Sum(i => i.Quantity * i.UnitPriceSnapshot) ?? 0m);
             var consultationFee = r.Appointment.FeeSnapshot ?? 0m;
             return new InvoiceCandidateResponse(r.Id, r.AppointmentId, r.PatientId, r.Patient.FullName,
                 r.Appointment.StartTime, consultationFee, lineAmount, consultationFee + lineAmount);
@@ -216,7 +217,7 @@ public sealed class BillingService(ClinicRepository repository, ClinicAccess acc
         return Map(invoice);
     }
 
-    private IQueryable<Invoice> Invoices() => repository.Query<Invoice>().Include(i => i.InvoiceItems).Include(i => i.Payments).AsSplitQuery();
+    private IQueryable<Invoice> Invoices() => repository.Query<Invoice>().Include(i => i.Patient).Include(i => i.InvoiceItems).Include(i => i.Payments).AsSplitQuery();
     private async Task<bool> IsCashierAsync(int userId, CancellationToken ct) => await access.HasRoleAsync(userId, "Receptionist", ct) || await access.HasRoleAsync(userId, "Admin", ct);
     private async Task RequireCashierAsync(int userId, CancellationToken ct)
     {
@@ -227,5 +228,7 @@ public sealed class BillingService(ClinicRepository repository, ClinicAccess acc
         i.InvoiceItems.Select(l => new InvoiceLineResponse(l.Description, l.Quantity, l.UnitPrice, l.Amount)).ToList(),
         i.Payments.OrderBy(p => p.Id).Select(p => new PaymentResponse(p.Id, p.Amount, p.Method, DateTime.SpecifyKind(p.PaidAt, DateTimeKind.Utc),
             p.CashReceived, p.ReceivedBy, p.ReceivedByNameSnapshot, p.IdempotencyKey,
-            p.Provider, p.ProviderEnvironment, p.ProviderTransactionId)).ToList(), i.ConsultationFee);
+            p.Provider, p.ProviderEnvironment, p.ProviderTransactionId)).ToList(), i.ConsultationFee,
+        string.IsNullOrWhiteSpace(i.PatientName) ? i.Patient?.FullName : i.PatientName,
+        i.Patient?.PatientCode, DateTime.SpecifyKind(i.CreatedAt, DateTimeKind.Utc));
 }

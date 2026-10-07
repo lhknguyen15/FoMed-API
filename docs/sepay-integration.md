@@ -69,14 +69,14 @@ Biến môi trường thay dấu `:` bằng `__`, ví dụ `SePay__WebhookSecret
 Chạy từ root sau khi SQL Server local sẵn sàng:
 
 ```powershell
-dotnet build FoMed-API/FoMed.Api/FoMed.Api.csproj --no-restore -o FoMed-API/FoMed.Api/bin/WorkflowAudit
+dotnet publish FoMed-API/FoMed.Api/FoMed.Api.csproj -c Release --no-restore -o FoMed-API/FoMed.Api/bin/WorkflowAuditPublish
 dotnet build tests/ClinicWorkflow/ClinicWorkflow.csproj --no-restore -o tests/ClinicWorkflow/bin/HttpAudit
 dotnet tests/ClinicWorkflow/bin/HttpAudit/ClinicWorkflow.dll --http --sepay-only
 dotnet tests/ClinicWorkflow/bin/HttpAudit/ClinicWorkflow.dll --sql
 dotnet tests/ClinicWorkflow/bin/HttpAudit/ClinicWorkflow.dll --http --cash-only
 ```
 
-Runner chỉ dùng credentials giả trên process local, database `FoMed_Audit_<guid>` và cổng 5181 đã kiểm tra trống; không gửi dữ liệu tới SePay. Có HTTP thật/JWT/HMAC/SQL, replay/đồng thời, DB fault rollback/retry, quyền sở hữu, thiếu/dư tiền, QR cũ/hết hạn/hủy, cash race, source payment và báo cáo. Có kiểm tra chữ ký trên bytes tiếng Việt, tương thích migration chạy lại. Database/file/process kiểm thử tự dọn.
+Runner dùng SQL Server localhost/Windows Integrated Security, không đọc cấu hình Development riêng; API có JWT/HMAC giả và cổng loopback ngẫu nhiên. Database `FoMed_Audit_<guid>` được kiểm tra trước thao tác; không gửi dữ liệu tới SePay. Có HTTP thật/JWT/HMAC/SQL, replay/đồng thời, DB fault rollback/retry, quyền sở hữu, thiếu/dư tiền, QR cũ/hết hạn/hủy, cash race, source payment và báo cáo. Có kiểm tra chữ ký trên bytes tiếng Việt, tương thích migration chạy lại. Database/file/process kiểm thử tự dọn. Xem [kết quả FM-04 mới nhất](fm-04-workflow-acceptance.md).
 
 Lượt SePay trực tiếp trước đó đạt **129 kiểm tra HTTP/SQL (gồm 9 login fixture)**, cùng **31 kiểm tra cấu hình/chữ ký và 7 time/slot** (06/10/2026). SQL regression trước đó đạt **51**, cash riêng **54 HTTP/SQL (9 login + 45 cash audit)**, regression phân quyền/auth đạt. Lượt HTTP toàn workflow trước đó dừng sau **132 checks đạt** do fixture cần ít nhất 5 slot tương lai trong ngày; không ghi nhận là full regression đạt. Các ca SePay và cash riêng không phụ thuộc các slot này. Có một HTTP 500 cố ý trong fault injection SePay; không phải lỗi của luồng thanh toán bình thường. Lượt trung gian đã phát hiện/fix mapping partial DbContext, status 413 bị handler đổi thành 500 và helper test đọc nhầm envelope của reports; kết quả chỉ tính lượt chạy lại sau sửa.
 

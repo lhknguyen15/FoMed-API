@@ -19,13 +19,18 @@ internal static class HttpWorkflowAudit
         var root = Directory.GetCurrentDirectory();
         var focusDispensing = args.Contains("--dispensing-only");
         // Never let an occupied audit port redirect writes to a user's running API.
-        var probe = new TcpListener(IPAddress.Loopback, 5181);
-        try { probe.Start(); } finally { probe.Stop(); }
-        var config = JsonDocument.Parse(await File.ReadAllTextAsync("FoMed-API/FoMed.Api/appsettings.Development.json"));
-        var builder = new SqlConnectionStringBuilder(config.RootElement.GetProperty("ConnectionStrings").GetProperty("DefaultConnection").GetString());
+        var probe = new TcpListener(IPAddress.Loopback, args.Contains("--browser") ? 5181 : 0);
+        probe.Start();
+        var port = ((IPEndPoint)probe.LocalEndpoint).Port;
+        probe.Stop();
+        var output = Path.GetFullPath(Path.Combine(root, "FoMed-API/FoMed.Api/bin/WorkflowAuditPublish"));
+        if (!File.Exists(Path.Combine(output, "FoMed.Api.dll")))
+            throw new InvalidOperationException("Publish the audit API to bin/WorkflowAuditPublish first.");
+        if (File.Exists(Path.Combine(output, "appsettings.Development.json")))
+            throw new InvalidOperationException("Use a clean publish directory without private Development configuration.");
         var name = "FoMed_Audit_" + Guid.NewGuid().ToString("N");
+        var builder = LocalAuditDatabase.Master(name);
         var attachmentRoot = Path.GetFullPath(Path.Combine(root, "tests", "ClinicWorkflow", "bin", name));
-        builder.InitialCatalog = "master"; builder.ConnectTimeout = 5;
         await using var admin = new SqlConnection(builder.ConnectionString);
         await admin.OpenAsync();
         await new SqlCommand($"CREATE DATABASE [{name}]", admin).ExecuteNonQueryAsync();
@@ -40,6 +45,8 @@ internal static class HttpWorkflowAudit
             Console.WriteLine($"{(ok ? "PASS" : "FAIL")}: {label}" + (evidence is null ? "" : $" ({evidence})"));
         }
         Process? api = null;
+        var completed = false;
+        string? failureType = null;
         try
         {
             await using (var db = new FoMedDbContext(options))
@@ -86,11 +93,38 @@ internal static class HttpWorkflowAudit
                 db.AddRange(med, svc, cancelSvc); await db.SaveChangesAsync();
                 doctorId = doctor.Doctor!.Id; medicineId = med.Id; serviceId = svc.Id; cancelServiceId = cancelSvc.Id;
             }
-            var start = new ProcessStartInfo("dotnet") { WorkingDirectory = Path.Combine(root, "FoMed-API/FoMed.Api"), UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
-            start.ArgumentList.Add(Path.Combine(root, "FoMed-API/FoMed.Api/bin/WorkflowAudit/FoMed.Api.dll"));
-            foreach (var arg in new[] { "--urls", "http://127.0.0.1:5181", "--Logging:EventLog:LogLevel:Default=None", "--Logging:Console:LogLevel:Default=None" }) start.ArgumentList.Add(arg);
-            start.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
+            var start = new ProcessStartInfo("dotnet") { WorkingDirectory = output, UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+            start.ArgumentList.Add(Path.Combine(output, "FoMed.Api.dll"));
+            foreach (var arg in new[] { "--urls", $"http://127.0.0.1:{port}", "--Logging:EventLog:LogLevel:Default=None", "--Logging:Console:LogLevel:Default=None" }) start.ArgumentList.Add(arg);
+            // Do not inherit deployment or private payment settings from the developer's shell.
+            foreach (var key in start.Environment.Keys.Where(key => key.StartsWith("SePay__", StringComparison.OrdinalIgnoreCase)
+                || key.StartsWith("Jwt__", StringComparison.OrdinalIgnoreCase)
+                || key.StartsWith("ConnectionStrings__", StringComparison.OrdinalIgnoreCase)
+                || key.StartsWith("Cors__", StringComparison.OrdinalIgnoreCase)
+                || key.StartsWith("ClinicalAttachments__", StringComparison.OrdinalIgnoreCase)
+                || key.StartsWith("AuthRateLimit__", StringComparison.OrdinalIgnoreCase)).ToArray())
+                start.Environment.Remove(key);
+            start.Environment["ASPNETCORE_ENVIRONMENT"] = "Audit";
+            start.Environment["DOTNET_ENVIRONMENT"] = "Audit";
+            start.Environment["RENDER"] = "false";
+            start.Environment["ASPNETCORE_HTTPS_PORT"] = "";
+            start.Environment["ASPNETCORE_FORWARDEDHEADERS_ENABLED"] = "false";
+            start.Environment["AuthRateLimit__ClientIpSource"] = "Connection";
+            start.Environment["AuthRateLimit__Enabled"] = "true";
+            if (args.Contains("--rate-limit-only"))
+            {
+                foreach (var policy in new[] { "Login", "Register" })
+                {
+                    start.Environment[$"AuthRateLimit__{policy}__PermitLimit"] = "2";
+                    start.Environment[$"AuthRateLimit__{policy}__WindowSeconds"] = "4";
+                }
+            }
+            start.Environment["Jwt__Key"] = "Fake-Workflow-Audit-Only-Not-Real-Key-2026";
+            start.Environment["Jwt__Issuer"] = "WorkflowAudit";
+            start.Environment["Jwt__Audience"] = "WorkflowAudit";
+            start.Environment["Cors__AllowedOrigins__0"] = "http://localhost:5174";
             start.Environment["ConnectionStrings__DefaultConnection"] = builder.ConnectionString;
+            start.Environment["ClinicalAttachments__Enabled"] = "true";
             start.Environment["ClinicalAttachments__StoragePath"] = attachmentRoot;
             if (args.Contains("--sepay-only"))
             {
@@ -108,7 +142,7 @@ internal static class HttpWorkflowAudit
             api = Process.Start(start) ?? throw new Exception("Cannot start isolated API");
             // Drain logs, but never persist configuration/secrets to audit artifacts.
             api.BeginOutputReadLine(); api.BeginErrorReadLine();
-            using var client = new HttpClient { BaseAddress = new("http://127.0.0.1:5181"), Timeout = TimeSpan.FromSeconds(25) };
+            using var client = new HttpClient(new HttpClientHandler { UseProxy = false, AllowAutoRedirect = false }) { BaseAddress = new($"http://127.0.0.1:{port}"), Timeout = TimeSpan.FromSeconds(25) };
             var ready = false;
             for (var attempt = 0; attempt < 50; attempt++)
             {
@@ -177,6 +211,13 @@ internal static class HttpWorkflowAudit
                 await using var db = new FoMedDbContext(options);
                 return await db.AuditLogs.CountAsync(a => a.Entity == "MedicalRecord");
             }
+            if (args.Contains("--rate-limit-only"))
+            {
+                await AuthRateLimitAudit.RunHttpAsync(options, client, Check);
+                completed = true;
+                if (failed > 0) Environment.ExitCode = 1;
+                return;
+            }
             foreach (var role in new[] { "patient", "other-patient", "doctor", "other-doctor", "receptionist", "technician", "other-technician", "pharmacist", "admin" })
             {
                 var login = await Need(null, "POST", "/api/auth/login", new { username = role, password }, 200, "Login " + role);
@@ -186,15 +227,18 @@ internal static class HttpWorkflowAudit
             if (args.Contains("--sepay-only"))
             {
                 await SePayAudit.RunAsync(options, client, Call, Check);
+                completed = true;
                 if (failed > 0) Environment.ExitCode = 1;
                 return;
             }
             if (args.Contains("--cash-only"))
             {
                 await PaymentCashAudit.RunAsync(options, Call, Check);
+                completed = true;
                 if (failed > 0) Environment.ExitCode = 1;
                 return;
             }
+            await CompletionHttpAudit.RunAsync(options, Call, Check);
             var slots = await Need(null, "GET", $"/api/appointments/available-slots?doctorId={doctorId}&date={today:yyyy-MM-dd}", null, 200, "VC-03 available slots");
             var available = slots.EnumerateArray().Where(s => s.GetProperty("isAvailable").GetBoolean()).ToArray();
             if (available.Length < 2) throw new Exception("Audit requires two future slots today; run before the final slot.");
@@ -293,6 +337,19 @@ internal static class HttpWorkflowAudit
             await Reject("doctor", "PUT", $"/api/appointments/{appointmentId}/complete", new { }, 409, "Pending lab prevents finalization");
             await Reject("doctor", "POST", $"/api/clinical/lab-orders/{orderId}/result", new { resultSummary = "Invalid role" }, 403, "Only technician enters results");
             await Need("technician", "POST", $"/api/clinical/lab-orders/{orderId}/result", new { resultSummary = "HGB 13.2 g/dl", referenceRange = "12-16", conclusion = "Audit normal" }, 201, "VC-14 technician completes lab");
+            var doctorResults = await Need("doctor", "GET", $"/api/clinical/records/{recordId}/services", null, 200, "Doctor reloads completed lab from API");
+            var completedOrder = doctorResults.EnumerateArray().Single(o => o.GetProperty("id").GetInt32() == orderId);
+            Check(completedOrder.GetProperty("status").GetInt32() == 1 && completedOrder.GetProperty("resultSummary").GetString() == "HGB 13.2 g/dl"
+                && completedOrder.GetProperty("conclusion").GetString() == "Audit normal" && completedOrder.GetProperty("resultAt").ValueKind == JsonValueKind.String,
+                "Doctor sees completed status and result before prescribing");
+            // Restore fixture price for the new prescription revision, then change the catalog again.
+            await using (var db = new FoMedDbContext(options))
+                await db.Medicines.Where(m => m.Id == medicineId).ExecuteUpdateAsync(s => s.SetProperty(m => m.Price, 10));
+            var postResultPrescription = await Need("doctor", "PUT", $"/api/clinical/records/{recordId}/prescription",
+                new { allergyAcknowledged = true, note = "Reviewed lab: Audit normal", items = new[] { new { medicineId, quantity = 5, dosage = "1 daily", instruction = "After food" } } }, 200, "Doctor updates prescription after lab result");
+            Check(postResultPrescription.GetProperty("note").GetString() == "Reviewed lab: Audit normal", "Result-based prescription revision persists");
+            await using (var db = new FoMedDbContext(options))
+                await db.Medicines.Where(m => m.Id == medicineId).ExecuteUpdateAsync(s => s.SetProperty(m => m.Price, 99));
             var uploadedLabFile = await Upload("technician", recordId, orderId, "lab-demo.png", pngBytes);
             Check(uploadedLabFile.Status == 201, "Technician uploads file for own completed result");
             var labAttachmentId = Data(uploadedLabFile).GetProperty("id").GetInt32();
@@ -317,6 +374,12 @@ internal static class HttpWorkflowAudit
             var invoice = await Need("receptionist", "POST", "/api/invoices", new { medicalRecordId = recordId }, 201, "VC-11 issue invoice");
             var invoiceId = invoice.GetProperty("id").GetInt32();
             Check(invoice.GetProperty("totalAmount").GetDecimal() == 550, "Invoice = fee 300 + Completed lab 2x100 + medicine 5x10; canceled excluded; snapshot retained", invoice.GetProperty("totalAmount"));
+            Check(invoice.GetProperty("patientName").GetString() == "Audit patient" && invoice.GetProperty("patientCode").GetString() == "AUDIT1"
+                && invoice.GetProperty("createdAt").GetString()!.EndsWith("Z"), "Print header includes patient identity and explicit UTC creation time");
+            var printInvoice = await Need("receptionist", "GET", $"/api/invoices/{invoiceId}", null, 200, "Cashier reloads invoice for printing");
+            Check(printInvoice.GetProperty("totalAmount").GetDecimal() == 550 && printInvoice.GetProperty("payments").GetArrayLength() == 0,
+                "Print data read does not collect payment");
+            await Reject("doctor", "GET", $"/api/invoices/{invoiceId}", null, 403, "Doctor cannot retrieve print billing data");
             await Reject("receptionist", "POST", "/api/invoices", new { medicalRecordId = recordId }, 409, "Duplicate invoice blocked");
             await Reject("other-patient", "GET", $"/api/invoices/{invoiceId}", null, 403, "Invoice ownership");
             await Reject("receptionist", "POST", $"/api/invoices/{invoiceId}/payments", new { amount = 551, method = 0 }, 400, "Overpayment blocked");
@@ -326,6 +389,10 @@ internal static class HttpWorkflowAudit
             Check(report.Status == 200 && report.Body.GetProperty("collectedAmount").GetDecimal() == 200 && report.Body.GetProperty("outstandingAmount").GetDecimal() == 350, "VC-23 payments-based revenue and remaining debt");
             await Need("receptionist", "POST", $"/api/invoices/{invoiceId}/payments", new { amount = 350, method = 1 }, 200, "VC-11 settle balance");
             await Reject("receptionist", "POST", $"/api/invoices/{invoiceId}/payments", new { amount = 1, method = 0 }, 409, "Paid invoice cannot be charged again");
+            var paidPrint = await Need("patient", "GET", $"/api/invoices/{invoiceId}", null, 200, "Owner reads saved settled invoice");
+            Check(paidPrint.GetProperty("status").GetInt32() == 1 && paidPrint.GetProperty("paidAmount").GetDecimal() == 550
+                && paidPrint.GetProperty("payments").EnumerateArray().Sum(p => p.GetProperty("amount").GetDecimal()) == 550,
+                "Settled print totals reconcile with saved payments");
             report = await Call("admin", "GET", "/api/reports/summary?" + range);
             Check(report.Status == 200 && report.Body.GetProperty("collectedAmount").GetDecimal() == 550 && report.Body.GetProperty("outstandingAmount").GetDecimal() == 0, "VC-23 settled report reconciles");
             await Reject("patient", "GET", "/api/pharmacy/inventory", null, 403, "Patient cannot access inventory");
@@ -789,6 +856,12 @@ internal static class HttpWorkflowAudit
                     "Two full UI journeys consume exactly four units, earliest-expiry batch first");
             }
         }
+        catch (Exception error)
+        {
+            failureType = error.GetType().Name;
+            if (failed == 0) failed++;
+            throw;
+        }
         finally
         {
             if (api is not null) { if (!api.HasExited) { api.Kill(entireProcessTree: true); await api.WaitForExitAsync(); } api.Dispose(); }
@@ -797,11 +870,14 @@ internal static class HttpWorkflowAudit
             if (!attachmentRoot.StartsWith(expectedAttachmentParent, StringComparison.OrdinalIgnoreCase) || Path.GetFileName(attachmentRoot) != name)
                 throw new Exception("Unsafe audit attachment cleanup path");
             if (Directory.Exists(attachmentRoot)) Directory.Delete(attachmentRoot, recursive: true);
-            if (!Regex.IsMatch(name, "^FoMed_Audit_[a-f0-9]{32}$")) throw new Exception("Invalid audit database name");
+            LocalAuditDatabase.Guard(builder, name);
             await new SqlCommand($"ALTER DATABASE [{name}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{name}]", admin).ExecuteNonQueryAsync();
             Directory.CreateDirectory("tests/ClinicWorkflow/bin/audit-results");
-            await File.WriteAllTextAsync("tests/ClinicWorkflow/bin/audit-results/http-workflow.json", JsonSerializer.Serialize(new { executedAtUtc = DateTime.UtcNow, passed, failed, observations }, new JsonSerializerOptions { WriteIndented = true }));
-            Console.WriteLine($"Audit: {passed} passed, {failed} failed. Isolated database removed; application data untouched.");
+            var scenario = args.Contains("--rate-limit-only") ? "auth-rate-limit" : args.Contains("--sepay-only") ? "sepay" : args.Contains("--cash-only") ? "cash" : args.Contains("--browser") ? "browser" : "workflow";
+            // Only a normal fall-through or completed focus suite is an acceptance result.
+            completed = failureType is null && failed == 0;
+            await File.WriteAllTextAsync($"tests/ClinicWorkflow/bin/audit-results/http-{scenario}.json", JsonSerializer.Serialize(new { executedAtUtc = DateTime.UtcNow, scenario, completed, failureType, passed, failed, observations }, new JsonSerializerOptions { WriteIndented = true }));
+            Console.WriteLine($"Audit: {passed} passed, {failed} failed; completed={completed}. Isolated database removed; application data untouched.");
         }
         if (failed > 0) Environment.ExitCode = 1;
     }

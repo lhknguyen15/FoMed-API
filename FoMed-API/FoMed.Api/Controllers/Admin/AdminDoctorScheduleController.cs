@@ -25,9 +25,9 @@ public sealed class AdminDoctorScheduleController(AdminDoctorScheduleService ser
     public async Task<IActionResult> Update(int id, [FromBody] SaveAdminDoctorScheduleRequest request, CancellationToken ct) => Ok(await service.UpdateAsync(UserId, id, request, ct));
 
     [HttpDelete("{id:int}")]
-    public async Task<IActionResult> Delete(int id, CancellationToken ct)
+    public async Task<IActionResult> Delete(int id, CancellationToken ct, [FromQuery] string? expectedVersion = null)
     {
-        await service.DeleteAsync(UserId, id, ct);
+        await service.DeleteAsync(UserId, id, ct, expectedVersion: expectedVersion);
         return NoContent();
     }
 }

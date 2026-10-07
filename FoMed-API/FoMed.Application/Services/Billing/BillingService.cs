@@ -72,6 +72,59 @@ public sealed class BillingService(ClinicRepository repository, ClinicAccess acc
         return (await query.OrderByDescending(i => i.Id).Skip((page - 1) * 20).Take(20).ToListAsync(ct)).Select(Map).ToList();
     }
 
+    public async Task<InvoiceSearchResponse> SearchAsync(int userId, InvoiceSearchRequest request, CancellationToken ct)
+    {
+        await RequireCashierAsync(userId, ct);
+        var query = BuildSearchQuery(request);
+        var total = await query.CountAsync(ct);
+        var items = await query.OrderByDescending(i => i.CreatedAt).ThenByDescending(i => i.Id)
+            .Skip((request.Page - 1) * 20).Take(20)
+            .Select(i => new InvoiceSummaryResponse(i.Id, i.InvoiceNo, i.PatientId,
+                i.Patient.PatientCode, i.PatientName ?? i.Patient.FullName, i.MedicalRecordId, i.CreatedAt,
+                i.TotalAmount, i.Payments.Sum(p => (decimal?)p.Amount) ?? 0m, i.Status)).ToListAsync(ct);
+        // SQL timestamps are UTC even when the provider materializes an unspecified DateTime.
+        return new InvoiceSearchResponse(items.Select(i => i with { CreatedAt = DateTime.SpecifyKind(i.CreatedAt, DateTimeKind.Utc) }).ToList(), request.Page, 20, total);
+    }
+
+    private IQueryable<Invoice> BuildSearchQuery(InvoiceSearchRequest request)
+    {
+        if (request.Page < 1 || request.Page > 100000) throw new ClinicException(400, "Trang không hợp lệ.");
+        var keyword = request.Keyword?.Trim() ?? "";
+        if (keyword.Length > 100) throw new ClinicException(400, "Nội dung tìm kiếm không được vượt quá 100 ký tự.");
+        if (request.Status is not ("all" or "outstanding" or "unpaid" or "partial" or "paid" or "cancelled"))
+            throw new ClinicException(400, "Trạng thái hóa đơn không hợp lệ.");
+        if (request.FromDate > request.ToDate) throw new ClinicException(400, "Ngày bắt đầu không được sau ngày kết thúc.");
+        foreach (var date in new[] { request.FromDate, request.ToDate })
+            if (date.HasValue && (date.Value.Year < 1900 || date.Value.Year > 9998)) throw new ClinicException(400, "Ngày lọc hóa đơn không hợp lệ.");
+
+        var invoices = repository.Query<Invoice>().AsNoTracking();
+        if (request.FromDate.HasValue)
+        {
+            var fromUtc = request.FromDate.Value.ToDateTime(TimeOnly.MinValue).AddHours(-7);
+            invoices = invoices.Where(i => i.CreatedAt >= fromUtc);
+        }
+        if (request.ToDate.HasValue)
+        {
+            var untilUtc = request.ToDate.Value.AddDays(1).ToDateTime(TimeOnly.MinValue).AddHours(-7);
+            invoices = invoices.Where(i => i.CreatedAt < untilUtc);
+        }
+        if (keyword.Length > 0)
+        {
+            var patientId = int.TryParse(keyword.TrimStart('#'), out var id) ? id : -1;
+            invoices = invoices.Where(i => i.InvoiceNo.Contains(keyword) || i.Patient.PatientCode.Contains(keyword)
+                || (i.PatientName ?? i.Patient.FullName).Contains(keyword) || i.PatientId == patientId);
+        }
+        return request.Status switch
+        {
+            "outstanding" => invoices.Where(i => i.Status == 0 && (i.Payments.Sum(p => (decimal?)p.Amount) ?? 0m) < i.TotalAmount),
+            "unpaid" => invoices.Where(i => i.Status == 0 && (i.Payments.Sum(p => (decimal?)p.Amount) ?? 0m) == 0m),
+            "partial" => invoices.Where(i => i.Status == 0 && (i.Payments.Sum(p => (decimal?)p.Amount) ?? 0m) > 0m && (i.Payments.Sum(p => (decimal?)p.Amount) ?? 0m) < i.TotalAmount),
+            "paid" => invoices.Where(i => i.Status == 1),
+            "cancelled" => invoices.Where(i => i.Status == 2),
+            _ => invoices
+        };
+    }
+
     public async Task<IReadOnlyList<InvoiceCandidateResponse>> ListEligibleAsync(int userId, int page, CancellationToken ct)
     {
         if (page < 1 || page > 100000) throw new ClinicException(400, "Trang khong hop le.");

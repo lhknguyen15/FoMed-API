@@ -100,6 +100,11 @@ public sealed record DoctorQueuePatientResponse(
     string? Allergies,
     IReadOnlyList<PatientHistorySummary> RecentHistory);
 
+public sealed record DoctorInProgressResponse(
+    AppointmentResponse Appointment,
+    int MedicalRecordId,
+    DateTime StartedAt);
+
 public sealed record PatientHistorySummary(
     int MedicalRecordId,
     int AppointmentId,

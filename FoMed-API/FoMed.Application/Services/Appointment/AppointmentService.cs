@@ -4,6 +4,7 @@ using FoMed.Infrastructure.Models;
 using FoMed.Infrastructure.Models.Enums;
 using FoMed.Infrastructure.UnitOfWork;
 using FoMed.Application.Services.Clinical;
+using FoMed.Infrastructure.Repositories;
 
 namespace FoMed.Application.Services.Appointment;
 
@@ -347,12 +348,10 @@ public sealed class AppointmentService(IUnitOfWork unitOfWork, IClinicalAuditCon
         var response = appointments.Select(appointment => new DoctorQueuePatientResponse(
             MapToResponse(appointment),
             appointment.Patient.Allergies,
-            appointment.Patient.MedicalRecords
-                .Where(record => record.AppointmentId != appointment.Id)
-                .OrderByDescending(record => record.CreatedAt)
-                .Take(5)
+            MedicalRecordHistoryQuery.Recent(appointment.Patient.MedicalRecords.AsQueryable(),
+                appointment.PatientId, appointment.Id, appointment.StartTime)
                 .Select(record => new PatientHistorySummary(
-                    record.Id, record.AppointmentId, record.CreatedAt, record.Diagnosis, record.Note))
+                    record.Id, record.AppointmentId, record.Appointment.StartTime, record.Diagnosis, record.Note))
                 .ToList())).ToList();
         var historyIds = response.SelectMany(item => item.RecentHistory).Select(record => record.MedicalRecordId).Distinct().ToArray();
         if (historyIds.Length > 0)
@@ -368,6 +367,24 @@ public sealed class AppointmentService(IUnitOfWork unitOfWork, IClinicalAuditCon
         {
             DataResponse = response,
             Message = AppointmentResponseMessageDTO.GetWaitingQueueSuccess,
+            StatusCode = 200
+        };
+    }
+
+    public async Task<HTTPResponseData<IReadOnlyList<DoctorInProgressResponse>>> GetDoctorInProgressAsync(
+        int currentUserId, CancellationToken cancellationToken = default)
+    {
+        // Scope comes only from the authenticated doctor, never a client-supplied doctorId.
+        var doctor = await _unitOfWork.DoctorRepository.GetByUserIdAsync(currentUserId, cancellationToken);
+        if (doctor is not { IsActive: true })
+            return Fail<IReadOnlyList<DoctorInProgressResponse>>(AppointmentResponseMessageDTO.DoctorNotFound, 404);
+
+        var records = await _unitOfWork.AppointmentRepository.GetDoctorInProgressAsync(doctor.Id, cancellationToken);
+        return new HTTPResponseData<IReadOnlyList<DoctorInProgressResponse>>
+        {
+            DataResponse = records.Select(record => new DoctorInProgressResponse(
+                MapToResponse(record.Appointment), record.Id, record.CreatedAt)).ToList(),
+            Message = "Lấy danh sách lượt đang khám thành công.",
             StatusCode = 200
         };
     }

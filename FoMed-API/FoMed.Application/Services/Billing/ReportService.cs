@@ -6,6 +6,7 @@ using FoMed.Infrastructure.Models;
 using FoMed.Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
 using AppointmentEntity = FoMed.Infrastructure.Models.Appointment;
+using DoctorEntity = FoMed.Infrastructure.Models.Doctor;
 
 namespace FoMed.Application.Services.Billing;
 
@@ -20,7 +21,6 @@ public sealed class ReportService(ClinicRepository repository, ClinicAccess acce
 
         // Appointment schedule columns use Vietnam wall-clock time, while invoice/payment timestamps are UTC.
         var appointmentsQuery = repository.Query<AppointmentEntity>().AsNoTracking()
-            .Include(a => a.Doctor)
             .Where(a => a.StartTime >= from && a.StartTime < to);
         var issuedInvoicesQuery = repository.Query<Invoice>().AsNoTracking()
             .Where(i => i.CreatedAt >= utcFrom && i.CreatedAt < utcTo && i.Status != 2);
@@ -51,9 +51,8 @@ public sealed class ReportService(ClinicRepository repository, ClinicAccess acce
             .Select(i => new { i.TotalAmount, PaymentsTotal = i.Payments.Sum(p => p.Amount), DoctorId = i.Appointment == null ? (int?)null : i.Appointment.DoctorId })
             .ToListAsync(ct);
 
-        var appointmentGroups = appointments.GroupBy(a => new { a.DoctorId, a.Doctor.FullName }).ToDictionary(g => g.Key.DoctorId, g => new
+        var appointmentGroups = appointments.GroupBy(a => a.DoctorId).ToDictionary(g => g.Key, g => new
         {
-            Name = g.Key.FullName,
             Count = g.Count(),
             Completed = g.Count(a => a.Status == 3),
             NoShow = g.Count(a => a.Status == 5),
@@ -63,7 +62,14 @@ public sealed class ReportService(ClinicRepository repository, ClinicAccess acce
             .Concat(issuedInvoices.Where(x => x.DoctorId.HasValue).Select(x => x.DoctorId!.Value))
             .Concat(collectedPayments.Where(x => x.DoctorId.HasValue).Select(x => x.DoctorId!.Value))
             .Concat(receivableInvoices.Where(x => x.DoctorId.HasValue).Select(x => x.DoctorId!.Value))
-            .Distinct();
+            .Distinct().ToArray();
+
+        // A payment today may belong to an older visit. Resolve names independently of visits in this period.
+        // Include inactive doctors in historical reports and fetch only IDs/names in one batch (not per row).
+        var doctorNames = doctorIds.Length == 0 ? new Dictionary<int, string>() : await repository.Query<DoctorEntity>()
+            .AsNoTracking().Where(d => doctorIds.Contains(d.Id))
+            .Select(d => new { d.Id, d.FullName })
+            .ToDictionaryAsync(d => d.Id, d => d.FullName, ct);
 
         var doctors = doctorIds.Select(doctorId =>
         {
@@ -76,7 +82,8 @@ public sealed class ReportService(ClinicRepository repository, ClinicAccess acce
             var denominator = appointmentCount - cancelledCount;
             var noShowCount = appointmentGroup?.NoShow ?? 0;
             var noShowRate = denominator == 0 ? 0m : decimal.Round(noShowCount * 100m / denominator, 1);
-            return new DoctorReportRow(doctorId, appointmentGroup?.Name ?? $"Bác sĩ #{doctorId}", appointmentCount,
+            var doctorName = doctorNames.GetValueOrDefault(doctorId);
+            return new DoctorReportRow(doctorId, string.IsNullOrWhiteSpace(doctorName) ? "Chưa có thông tin bác sĩ" : doctorName, appointmentCount,
                 appointmentGroup?.Completed ?? 0, noShowCount, cancelledCount, noShowRate, issued, collected, outstanding);
         }).OrderBy(x => x.DoctorName).ToList();
 

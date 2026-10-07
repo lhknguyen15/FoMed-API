@@ -105,6 +105,18 @@ public sealed class AppointmentController(AppointmentService appointmentService)
         return StatusCode(res.StatusCode, res);
     }
 
+    // GET api/appointments/doctor-in-progress (all dates, authenticated doctor only)
+    [HttpGet("doctor-in-progress")]
+    [Authorize(Roles = "Doctor")]
+    [ProducesResponseType(typeof(HTTPResponseData<IReadOnlyList<DoctorInProgressResponse>>), 200)]
+    public async Task<ActionResult> GetDoctorInProgress(CancellationToken ct)
+    {
+        var uid = GetUserId();
+        if (uid is null) return Unauthorized(Unauth());
+        var res = await _service.GetDoctorInProgressAsync(uid.Value, ct);
+        return StatusCode(res.StatusCode, res);
+    }
+
     // POST api/appointments/call-next?date=2026-09-30&doctorId=1
     [HttpPost("call-next")]
     [Authorize(Roles = "Doctor,Receptionist,Admin")]

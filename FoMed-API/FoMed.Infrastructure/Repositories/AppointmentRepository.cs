@@ -13,6 +13,7 @@ public interface IAppointmentRepository : IRepositoryBase<Appointment>
     Task<IReadOnlyList<Appointment>> GetDoctorAppointmentsAsync(int doctorId, DateOnly? date = null, AppointmentStatus? status = null, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<Appointment>> GetStaffAppointmentsAsync(DateOnly? date = null, AppointmentStatus? status = null, int? doctorId = null, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<Appointment>> GetDoctorQueueAsync(int doctorId, DateOnly date, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<MedicalRecord>> GetDoctorInProgressAsync(int doctorId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<Appointment>> GetPatientAppointmentsAsync(int patientId, DateOnly? date = null, AppointmentStatus? status = null, CancellationToken cancellationToken = default);
     Task<bool> HasDoctorConflictAsync(int doctorId, DateTime startTime, DateTime endTime, int? excludeAppointmentId = null, CancellationToken cancellationToken = default);
     Task<bool> HasPatientConflictAsync(int patientId, DateTime startTime, DateTime endTime, int? excludeAppointmentId = null, CancellationToken cancellationToken = default);
@@ -109,7 +110,7 @@ public sealed class AppointmentRepository(FoMedDbContext dbContext)
         var end = date.ToDateTime(TimeOnly.MaxValue);
         return await dbContext.Appointments
             .AsNoTracking()
-            .Include(a => a.Patient).ThenInclude(p => p.MedicalRecords)
+            .Include(a => a.Patient).ThenInclude(p => p.MedicalRecords).ThenInclude(r => r.Appointment)
             .Include(a => a.Doctor).ThenInclude(d => d.Specialty)
             .Include(a => a.Service)
             .Where(a => a.DoctorId == doctorId && a.Status == (byte)AppointmentStatus.Confirmed
@@ -117,6 +118,19 @@ public sealed class AppointmentRepository(FoMedDbContext dbContext)
             .OrderBy(a => a.QueueNumber).ThenBy(a => a.CheckedInAt)
             .ToListAsync(cancellationToken);
     }
+
+    // All unfinished visits, including earlier days. Do not mix them into the waiting queue.
+    public async Task<IReadOnlyList<MedicalRecord>> GetDoctorInProgressAsync(
+        int doctorId, CancellationToken cancellationToken = default) =>
+        await dbContext.MedicalRecords
+            .AsNoTracking()
+            .Include(r => r.Appointment).ThenInclude(a => a.Patient)
+            .Include(r => r.Appointment).ThenInclude(a => a.Doctor).ThenInclude(d => d.Specialty)
+            .Include(r => r.Appointment).ThenInclude(a => a.Service)
+            .Where(r => r.DoctorId == doctorId && r.Appointment.DoctorId == doctorId
+                && r.Appointment.Status == (byte)AppointmentStatus.InProgress && !r.IsFinalized)
+            .OrderBy(r => r.Appointment.StartTime).ThenBy(r => r.Id)
+            .ToListAsync(cancellationToken);
 
     public async Task<IReadOnlyList<Appointment>> GetPatientAppointmentsAsync(
         int patientId, DateOnly? date = null, AppointmentStatus? status = null, CancellationToken cancellationToken = default)

@@ -1,4 +1,5 @@
 using FoMed.Application.DTO.Clinical;
+using FoMed.Application.DTO.Appointment;
 using FoMed.Infrastructure.Models;
 using FoMed.Infrastructure.Models.Enums;
 using FoMed.Infrastructure.Repositories;
@@ -66,6 +67,29 @@ public sealed class ClinicalService(ClinicRepository repository, ClinicAccess ac
         }
         await repository.SaveAsync(ct);
         return response;
+    }
+
+    public async Task<IReadOnlyList<PatientHistorySummary>> GetRecordHistoryAsync(int userId, int recordId, CancellationToken ct)
+    {
+        var context = await repository.Query<MedicalRecord>().AsNoTracking().Include(r => r.Appointment)
+            .SingleOrDefaultAsync(r => r.Id == recordId, ct)
+            ?? throw new ClinicException(404, "Không tìm thấy bệnh án.");
+        if (!await access.IsDoctorAsync(userId, context.DoctorId, ct)
+            || context.Appointment.DoctorId != context.DoctorId || context.Appointment.PatientId != context.PatientId)
+            throw new ClinicException(403, "Chỉ bác sĩ phụ trách được xem lịch sử khám trong lượt khám này.");
+
+        var history = await MedicalRecordHistoryQuery.Recent(repository.Query<MedicalRecord>().AsNoTracking(),
+                context.PatientId, context.AppointmentId, context.Appointment.StartTime)
+            .Select(r => new PatientHistorySummary(r.Id, r.AppointmentId, r.Appointment.StartTime, r.Diagnosis, r.Note))
+            .ToListAsync(ct);
+        if (history.Count > 0)
+        {
+            var actor = await GetAuditActorAsync(userId, ct);
+            foreach (var item in history)
+                repository.Add(MedicalRecordAudit.Create(userId, actor, "Read", item.MedicalRecordId, "RecordHistory", auditContext));
+            await repository.SaveAsync(ct);
+        }
+        return history;
     }
 
     public async Task<MedicalRecordResponse> UpdateRecordAsync(int userId, int recordId, SaveMedicalRecordRequest request, CancellationToken ct)

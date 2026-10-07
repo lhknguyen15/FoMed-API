@@ -20,6 +20,8 @@ public sealed class ClinicalController(ClinicalService service) : ControllerBase
     public async Task<IActionResult> Create(int appointmentId, SaveMedicalRecordRequest request, CancellationToken ct) => Result(await service.CreateRecordAsync(UserId, appointmentId, request, ct), 201);
     [HttpGet("records/{id:int}")]
     public async Task<IActionResult> Get(int id, CancellationToken ct) => Result(await service.GetRecordAsync(UserId, id, ct));
+    [HttpGet("records/{id:int}/history"), Authorize(Roles = "Doctor")]
+    public async Task<IActionResult> RecordHistory(int id, CancellationToken ct) => Result(await service.GetRecordHistoryAsync(UserId, id, ct));
     [HttpPut("records/{id:int}"), Authorize(Roles = "Doctor")]
     public async Task<IActionResult> Update(int id, SaveMedicalRecordRequest request, CancellationToken ct) => Result(await service.UpdateRecordAsync(UserId, id, request, ct));
     [HttpPost("records/{id:int}/prescription"), Authorize(Roles = "Doctor")]

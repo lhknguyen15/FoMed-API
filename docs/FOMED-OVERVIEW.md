@@ -29,8 +29,9 @@ Bản demo dùng dữ liệu giả để trình diễn; **chưa phải hệ th�
 database, dữ liệu hay thanh toán đã hoạt động đầy đủ**.
 
 Có thể xem trang công khai mà không đăng nhập. Đặt lịch và các không gian làm việc
-yêu cầu tài khoản đúng vai trò. Không công khai tài khoản hoặc mật khẩu nhân viên;
-liên hệ người phụ trách dự án để được cấp tài khoản demo riêng.
+yêu cầu tài khoản đúng vai trò. README của hai repository có mục tài khoản trải
+nghiệm với năm tài khoản demo được chủ dự án công khai có chủ đích, chỉ dùng dữ liệu
+giả. Không công khai tài khoản Admin hoặc tài khoản nhân viên thật.
 
 ## 2. Mục tiêu dự án
 
@@ -153,5 +154,6 @@ Hướng dẫn cài đặt, cấu hình, chạy local và kiểm thử nằm tro
 - [FoMed-Frontend: chạy giao diện, cấu hình API và triển khai Vercel](https://github.com/lhknguyen15/FoMed-Frontend#readme).
 
 Hai repository độc lập: thay đổi backend cần kiểm thử/triển khai API; thay đổi
-giao diện cần build/triển khai frontend. Không đưa mật khẩu, token, chuỗi kết nối,
+giao diện cần build/triển khai frontend. Ngoài mật khẩu demo được công khai có chủ đích,
+không đưa mật khẩu tài khoản thật, hash, token, chuỗi kết nối,
 khóa SePay hoặc dữ liệu bệnh nhân thật vào GitHub hay tài liệu chia sẻ.

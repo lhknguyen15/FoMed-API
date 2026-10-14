@@ -14,6 +14,46 @@ khám bệnh, cận lâm sàng, kê đơn, kho thuốc, thu ngân và quản tr�
 Bản công khai dùng dữ liệu giả để trình diễn, **không phải hệ thống vận hành
 phòng khám thật**. Không nhập thông tin bệnh nhân thật hoặc chuyển tiền thật khi thử demo.
 
+## Tài khoản trải nghiệm demo
+
+[Mở trang đăng nhập FoMed](https://fo-med-frontend.vercel.app/login).
+
+Các tài khoản dưới đây được chủ dự án chủ động công khai để trải nghiệm với dữ liệu
+giả. Mật khẩu chung là `Test@123`, chỉ dành cho bản demo, không dùng lại ở tài khoản
+cá nhân hoặc môi trường thật. Không cung cấp tài khoản Admin.
+
+| Vai trò | Tên đăng nhập | Mật khẩu |
+| --- | --- | --- |
+| Bệnh nhân | `patient01` | `Test@123` |
+| Lễ tân | `demo202610.lt01` | `Test@123` |
+| Bác sĩ | `demo202610.bs01` | `Test@123` |
+| Kỹ thuật viên | `demo202610.kt01` | `Test@123` |
+| Dược sĩ | `demo202610.ds01` | `Test@123` |
+
+Đã kiểm tra đăng nhập thành công và đúng vai trò trên API demo ngày **14/10/2026**.
+Đây là kiểm tra đăng nhập, không phải nghiệm thu toàn bộ quy trình hoặc thanh toán Live.
+Chỉ sửa README không tạo tài khoản hay thay đổi mật khẩu trong database.
+
+### Gợi ý thử quy trình
+
+1. Bệnh nhân đặt lịch với bác sĩ liên kết tài khoản `demo202610.bs01`; có thể
+   đăng nhập bác sĩ trước để xem tên hồ sơ và chọn đúng bác sĩ khi đặt lịch.
+2. Lễ tân xác nhận lịch và tiếp đón bệnh nhân vào hàng chờ.
+3. Bác sĩ bắt đầu khám, ghi bệnh án và thêm chỉ định nếu cần.
+4. Kỹ thuật viên lưu kết quả; bác sĩ xem kết quả, kê đơn nếu cần và hoàn tất lượt khám.
+5. Lễ tân lập hóa đơn và ghi nhận thu tiền mặt **mô phỏng**. SePay chỉ dùng **Test**;
+   không quét QR hoặc chuyển tiền bằng tài khoản ngân hàng thật.
+6. Dược sĩ cấp thuốc theo đơn khi đáp ứng điều kiện nghiệp vụ và tồn kho hợp lệ.
+
+Đăng xuất trước khi đổi tài khoản. Nếu muốn dùng nhiều vai trò đồng thời, sử dụng
+hồ sơ trình duyệt riêng; nhiều tab trong cùng hồ sơ có thể dùng chung phiên đăng nhập.
+
+**Lưu ý:** đây là tài khoản dùng chung có quyền thao tác trên dữ liệu demo.
+Không nhập thông tin bệnh nhân thật, không đổi mật khẩu, sửa quyền hoặc phá hủy
+dữ liệu của lượt thử khác. Dữ liệu có thể thay đổi do người khác cùng trải nghiệm;
+không có cam kết tự khôi phục sau mỗi lượt. API/database có thể cần thời gian khởi
+động; nếu đăng nhập gián đoạn, chờ rồi thử lại, không gửi yêu cầu liên tục.
+
 ## Chức năng hiện có
 
 | Nhóm | Chức năng |
@@ -201,6 +241,7 @@ API Access/API key của SePay không thay thế việc xác thực webhook HMAC
 - [Báo cáo](docs/vc-23-reports.md)
 - [Nhật ký hệ thống](docs/vc-24-audit-logs.md)
 
-Không đưa thông tin bệnh nhân thật, mật khẩu/hash, token, BACPAC/BAK hoặc tệp bệnh án
+Ngoài mật khẩu của năm tài khoản demo được công khai có chủ đích ở trên, không đưa
+thông tin bệnh nhân thật, mật khẩu tài khoản thật/hash, token, BACPAC/BAK hoặc tệp bệnh án
 vào repository công khai. Bản demo và kiểm thử hiện có không thay thế đánh giá bảo mật,
 sao lưu, lưu trữ và quy trình vận hành trước khi dùng thực tế.

@@ -16,7 +16,7 @@ using Microsoft.EntityFrameworkCore;
 var supportedArguments = new HashSet<string>(StringComparer.Ordinal)
 {
     "--sql", "--http", "--hosting-only", "--sepay-only", "--cash-only",
-    "--dispensing-only", "--browser", "--journey-only", "--rate-limit-only"
+    "--dispensing-only", "--browser", "--journey-only", "--rate-limit-only", "--schedules-only"
 };
 if (args.Any(argument => !supportedArguments.Contains(argument)))
 {

@@ -218,6 +218,13 @@ internal static class HttpWorkflowAudit
                 if (failed > 0) Environment.ExitCode = 1;
                 return;
             }
+            if (args.Contains("--schedules-only"))
+            {
+                await AdminScheduleFrontendAudit.RunAsync(options, client.BaseAddress!, root, args.Contains("--browser"), Check);
+                completed = true;
+                if (failed > 0) Environment.ExitCode = 1;
+                return;
+            }
             foreach (var role in new[] { "patient", "other-patient", "doctor", "other-doctor", "receptionist", "technician", "other-technician", "pharmacist", "admin" })
             {
                 var login = await Need(null, "POST", "/api/auth/login", new { username = role, password }, 200, "Login " + role);
@@ -873,7 +880,7 @@ internal static class HttpWorkflowAudit
             LocalAuditDatabase.Guard(builder, name);
             await new SqlCommand($"ALTER DATABASE [{name}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{name}]", admin).ExecuteNonQueryAsync();
             Directory.CreateDirectory("tests/ClinicWorkflow/bin/audit-results");
-            var scenario = args.Contains("--rate-limit-only") ? "auth-rate-limit" : args.Contains("--sepay-only") ? "sepay" : args.Contains("--cash-only") ? "cash" : args.Contains("--browser") ? "browser" : "workflow";
+            var scenario = args.Contains("--schedules-only") ? "admin-schedules-frontend" : args.Contains("--rate-limit-only") ? "auth-rate-limit" : args.Contains("--sepay-only") ? "sepay" : args.Contains("--cash-only") ? "cash" : args.Contains("--browser") ? "browser" : "workflow";
             // Only a normal fall-through or completed focus suite is an acceptance result.
             completed = failureType is null && failed == 0;
             await File.WriteAllTextAsync($"tests/ClinicWorkflow/bin/audit-results/http-{scenario}.json", JsonSerializer.Serialize(new { executedAtUtc = DateTime.UtcNow, scenario, completed, failureType, passed, failed, observations }, new JsonSerializerOptions { WriteIndented = true }));

@@ -35,7 +35,9 @@ public sealed class DoctorTimeOffService(ClinicRepository repository, ClinicAcce
     {
         await using var write = await repository.BeginWriteAsync(ct);
         var timeOff = await repository.Query<DoctorTimeOff>().SingleOrDefaultAsync(x => x.Id == id, ct) ?? throw new ClinicException(404, "Không tìm thấy lịch nghỉ.");
-        var doctorId = await ResolveDoctorIdAsync(userId, request.DoctorId ?? timeOff.DoctorId, admin, ct);
+        // For admins, null deliberately selects clinic-wide leave; doctors retain their own scope.
+        var requestedDoctorId = admin ? request.DoctorId : request.DoctorId ?? timeOff.DoctorId;
+        var doctorId = await ResolveDoctorIdAsync(userId, requestedDoctorId, admin, ct);
         var (start, end) = ValidateRange(request);
         await EnsureNoAppointmentConflictAsync(doctorId, start, end, ct);
         timeOff.DoctorId = doctorId; timeOff.StartAt = start; timeOff.EndAt = end; timeOff.Reason = Normalize(request.Reason);
@@ -56,7 +58,13 @@ public sealed class DoctorTimeOffService(ClinicRepository repository, ClinicAcce
 
     private async Task<int?> ResolveDoctorIdAsync(int userId, int? requested, bool admin, CancellationToken ct)
     {
-        if (admin) { await RequireAdminAsync(userId, ct); return requested; }
+        if (admin)
+        {
+            await RequireAdminAsync(userId, ct);
+            if (requested.HasValue && !await repository.Query<DoctorEntity>().AnyAsync(d => d.Id == requested.Value && d.IsActive, ct))
+                throw new ClinicException(404, "Không tìm thấy bác sĩ đang hoạt động.");
+            return requested;
+        }
         var own = await OwnDoctorIdAsync(userId, ct);
         if (requested.HasValue && requested != own) throw new ClinicException(403, "Bác sĩ chỉ được quản lý lịch nghỉ của mình.");
         return own;
